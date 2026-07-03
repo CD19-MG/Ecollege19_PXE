@@ -1,0 +1,33 @@
+#!ipxe
+# Menu PXE eCollege19 — atelier MARBOT (subnet 10.119.50.x)
+# Remplacer ${pxe-server} par l'IP du serveur PXE/HTTP a MARBOT (ou via DHCP option).
+# Les gros fichiers (WinPE, HBCD, WIM) sont servis en HTTP (plus rapide que TFTP).
+
+set pxe-server 10.119.50.XXX
+set http http://${pxe-server}
+
+:start
+menu eCollege19 - Deploiement des postes (MARBOT)
+item --gap --                Amorcage
+item local     Amorcer le disque local  (defaut)
+item --gap --                Deploiement
+item deploy    Deployer Windows  (WinPE -> apply WIM + unattend + drivers)
+item hbcd      HBCD - outils de secours / diagnostic
+choose --default local --timeout 8000 sel || goto local
+goto ${sel}
+
+# Securite : par defaut on rend la main au disque local (pas de reimage accidentel).
+:local
+sanboot --no-describe --drive 0x80 || goto start
+
+:deploy
+# WinPE sert de payload : booté via wimboot, il lance le script de deploiement (voir ../winpe).
+kernel ${http}/winpe/wimboot
+initrd ${http}/winpe/media/sources/boot.wim boot.wim
+boot || goto start
+
+:hbcd
+# Hiren's BootCD PE (WinPE de secours) — meme principe wimboot.
+kernel ${http}/hbcd/wimboot
+initrd ${http}/hbcd/boot.wim boot.wim
+boot || goto start

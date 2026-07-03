@@ -1,0 +1,21 @@
+# Images disque (gros fichiers) — jamais versionnées
+images/*
+!images/.gitkeep
+*.wim
+*.iso
+*.vhd
+*.vhdx
+*.esd
+
+# Artefacts de build WinPE
+winpe/mount/
+winpe/media/
+winpe/*.wim
+
+# Secrets éventuels (comptes de jonction de domaine dans unattend, etc.)
+*.secret
+unattend.local.xml
+
+# Divers
+*.log
+Thumbs.db
