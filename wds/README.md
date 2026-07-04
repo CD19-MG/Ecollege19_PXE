@@ -14,10 +14,12 @@ Image** + des **fichiers de réponse** (`../unattend/`) + ses **packages de pilo
 ## Mise en place
 1. **Image de démarrage (boot)** : importer dans WDS le `boot.wim` de l'ISO Windows 11 (`sources\boot.wim`,
    x64 UEFI, signé MS) → *Images de démarrage*.
-2. **Image d'installation (install)** : importer `sources\install.wim` (édition voulue) → *Images d'installation*
-   (créer un **groupe d'images**). Noter **ImageName** + **ImageGroup** (repris dans `WDSClientUnattend.xml`).
-3. **Pilotes** : ajouter des **packages de pilotes** (driver packages) — ex. pack **HP Pro Mini 400 G9** —
-   et des **groupes de pilotes** filtrés par modèle (WDS les injecte à l'install).
+2. **Images d'installation** : importer **les DEUX éditions** du parc (Win11 **Pro** + **Pro Éducation**)
+   dans un **groupe d'images** (ex. `Win11`). Comme il y a 2 éditions, `WDSClientUnattend.xml` **ne fige
+   pas** `ImageName` → **le technicien choisit l'édition au boot** (WDS affiche la liste).
+3. **Pilotes** (parc multi-modèles) : **packages de pilotes** + **groupes filtrés par modèle**
+   (Fabricant/Modèle) → WDS injecte le bon groupe selon la machine. Voir **`../drivers/README.md`**
+   (liste des modèles HP + Lenovo à venir).
 4. **Fichiers de réponse** (`../unattend/`) :
    - `WDSClientUnattend.xml` → WDS > Propriétés serveur > **Client** > *Activer l'installation sans
      assistance* > architecture **x64** > pointer ce fichier.
@@ -33,8 +35,10 @@ Poste UEFI (Secure Boot ON) → PXE → `wdsmgfw.efi` (signé) → **WinPE** (si
 **Rien à désactiver.**
 
 ## Décisions actées
-- Image = **thin** (`install.wim` de l'ISO + pilotes/apps/jonction via WDS/unattend). *(Capture d'un master
+- Image = **thin** (`install.wim` de l'ISO + pilotes/jonction via WDS/unattend). *(Capture d'un master
   sysprepé possible plus tard si on veut tout figer.)*
+- **Deux éditions** importées (Pro + Pro Éducation) → **choix au boot** (pas de `ImageName` figé).
+- **Pilotes par groupes filtrés** par modèle (cf. `../drivers/`), extensible (Lenovo à venir).
 - **Jonction `ecollege19.lan`** (dans `ImageUnattend.xml`).
 
 ## Ce que garde le dépôt

@@ -27,15 +27,21 @@ docs/      cadrage (epopee_pxe.md) + notes
 dhcp/      options 66/67 à poser sur srv-wvdnscollf (pointent vers WDS)
 wds/       VOIE RETENUE : mise en place WDS seul (Secure Boot natif, sans MDT)
 unattend/  fichiers de réponse WDS (WinPE + OS) : partition UEFI, locale, jonction domaine
+drivers/   packages de pilotes WDS + groupes filtrés par modèle (parc hétérogène)
 tftp/      ALTERNATIVE (Secure Boot OFF) : bootloader iPXE + menu.ipxe — non utilisé
 images/    WIM de référence — NON versionné (gros fichiers, cf. .gitignore)
 ```
+
+> **Deux éditions** sur le parc (Win11 **Pro** + **Pro Éducation**) → on importe **les deux** dans WDS
+> et on **laisse le technicien choisir l'édition au boot** (pas de `ImageName` figé dans l'unattend).
+> **Parc multi-modèles** (HP variés + Lenovo à venir) → **pilotes par groupes filtrés** (cf. `drivers/`).
 
 ## Lien avec la console EPM
 Optionnel, phase 3 : un panneau d'orchestration dans le dashboard PC (associer poste↔image,
 déclencher, suivre) qui parlerait à l'API du serveur PXE. Le cœur PXE reste ici, autonome.
 
 ## État
-**Cadrage** (cf. `docs/epopee_pxe.md`). Décisions à trancher avant P1 : BIOS/UEFI, Secure Boot,
-source du WIM, jonction de domaine, outil (WinPE maison vs WDS). Phases : P1 amorçage → P2 payload
-→ P3 orchestration.
+Décisions **actées** : UEFI + Secure Boot ON, **WDS seul** (MDT écarté), image thin, jonction
+`ecollege19.lan`, **2 éditions** (Pro + Pro Éducation, choix au boot), **pilotes par groupes filtrés**.
+En cours : import des images dans WDS. Reste : pilotes par modèle + poste de test.
+Phases : P1 amorçage → P2 déploiement → P3 orchestration (optionnelle).

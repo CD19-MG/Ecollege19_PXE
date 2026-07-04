@@ -29,10 +29,16 @@
           </Credentials>
         </Login>
         <ImageSelection>
+          <!--
+            DEUX éditions sur le parc (Win11 Pro + Pro Éducation) : on NE fige PAS InstallImage,
+            pour laisser le technicien CHOISIR l'édition au boot (WDS affiche la liste). Décommenter
+            ce bloc UNIQUEMENT pour forcer une édition unique (adapter ImageName/ImageGroup).
           <InstallImage>
-            <ImageName>&lt;NOM_IMAGE_WIM&gt;</ImageName>
-            <ImageGroup>&lt;GROUPE_IMAGE&gt;</ImageGroup>
+            <ImageName>Windows 11 Education</ImageName>
+            <ImageGroup>Win11</ImageGroup>
           </InstallImage>
+          -->
+          <!-- Disque/partition cible de l'image choisie (partition Windows = 3, cf. DiskConfiguration). -->
           <InstallTo><DiskID>0</DiskID><PartitionID>3</PartitionID></InstallTo>
         </ImageSelection>
       </WindowsDeploymentServices>
