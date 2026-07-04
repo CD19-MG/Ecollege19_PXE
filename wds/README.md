@@ -1,37 +1,41 @@
-# WDS + MDT — déploiement Windows avec Secure Boot (voie retenue)
+# WDS (sans MDT) — déploiement Windows automatisé, Secure Boot activé
 
-**Pourquoi WDS** : Secure Boot doit rester **activé** sur les postes → seul un bootloader **signé
-Microsoft** est exécuté. WDS fournit `wdsmgfw.efi` + WinPE **signés MS** → amorçage réseau UEFI
-**Secure Boot natif**, sans rien désactiver. iPXE (non signé MS) est écarté pour cette raison
-(cf. `../tftp/` conservé seulement comme alternative si un jour Secure Boot OFF).
-
-**WDS + MDT** = le « MDT en PXE » : MDT (Microsoft Deployment Toolkit) fournit la séquence de tâches
-(partitionnement, apply WIM, drivers, apps, **jonction de domaine**, unattend), WDS l'amorce par PXE.
+**Pourquoi WDS seul** : Secure Boot doit rester **activé** → seul un bootloader **signé Microsoft**
+s'exécute. WDS fournit `wdsmgfw.efi` + WinPE **signés MS** → amorçage UEFI **Secure Boot natif**.
+**MDT étant en fin de vie**, on n'en dépend pas : WDS sait déployer **tout seul** via une **Install
+Image** + des **fichiers de réponse** (`../unattend/`) + ses **packages de pilotes**.
 
 ## Prérequis
-- `stats` doit être **Windows Server** (rôle WDS). *(À confirmer : édition de l'OS.)*
-- **ADK + WinPE add-on** (pour l'image de boot) et **MDT** installés (sur stats ou un poste d'admin).
-- Postes atelier : **UEFI**, **Secure Boot ON**, sur `10.119.50.x` (même subnet que le DHCP et stats).
+- `stats` = **Windows Server** avec le rôle **WDS** (fait ✅). Dossier **RemoteInstall** (ex. `D:\RemoteInstall`,
+  **distinct** d'un éventuel partage) créé à la config du rôle.
+- **ADK + WinPE add-on** (pour l'image de boot). *(Plus besoin de MDT.)*
+- Postes atelier : **UEFI, Secure Boot ON**, sur `10.119.50.x`.
 
-## Mise en place (grandes étapes)
-1. **Rôle WDS** sur stats → configurer (mode « standalone » si pas AD-intégré, ou intégré).
-2. **MDT** : créer un *Deployment Share* (partage SMB), y importer :
-   - le **système** (WIM de référence — cf. décision : capture master vs `install.wim`) ;
-   - les **drivers** par modèle (HP Pro Mini 400 G9, etc.) ;
-   - les **applications** à installer ;
-   - `CustomSettings.ini` / `Bootstrap.ini` (automatisation, jonction de domaine, nommage).
-3. MDT génère les **images de boot LiteTouch (WinPE)** → **importées dans WDS**.
-4. **WDS** publie l'image de boot UEFI signée → les postes PXE-bootent dessus (Secure Boot OK).
+## Mise en place
+1. **Image de démarrage (boot)** : importer dans WDS le `boot.wim` de l'ISO Windows 11 (`sources\boot.wim`,
+   x64 UEFI, signé MS) → *Images de démarrage*.
+2. **Image d'installation (install)** : importer `sources\install.wim` (édition voulue) → *Images d'installation*
+   (créer un **groupe d'images**). Noter **ImageName** + **ImageGroup** (repris dans `WDSClientUnattend.xml`).
+3. **Pilotes** : ajouter des **packages de pilotes** (driver packages) — ex. pack **HP Pro Mini 400 G9** —
+   et des **groupes de pilotes** filtrés par modèle (WDS les injecte à l'install).
+4. **Fichiers de réponse** (`../unattend/`) :
+   - `WDSClientUnattend.xml` → WDS > Propriétés serveur > **Client** > *Activer l'installation sans
+     assistance* > architecture **x64** > pointer ce fichier.
+   - `ImageUnattend.xml` → Propriétés de l'**Install Image** > *mode sans assistance* > pointer ce fichier
+     (locale, **jonction ecollege19.lan**, admin local).
+   - Renseigner les **secrets en local** (hors dépôt) — cf. `../unattend/README.md`.
+5. **WDS > Propriétés > Démarrage** : *Répondre à tous les clients* (ou connus), architecture par défaut x64 UEFI.
+6. **DHCP `srv-wvdnscollf`** : options **066** = IP stats, **067** = `boot\x64\wdsmgfw.efi` (cf. `../dhcp/`).
 
-## Boot & Secure Boot
-- WDS sert le NBP **signé MS** (`boot\x64\wdsmgfw.efi`) via **TFTP** → WinPE (signé) → LiteTouch (MDT).
-- **Aucune désactivation de Secure Boot** requise.
+## Chaîne d'amorçage
+Poste UEFI (Secure Boot ON) → PXE → `wdsmgfw.efi` (signé) → **WinPE** (signé) → applique l'**install.wim**
++ **pilotes** + **unattend** (partition GPT, locale, **jonction ecollege19.lan**, admin local) → reboot.
+**Rien à désactiver.**
 
-## Décisions à trancher (avant la séquence MDT)
-- **Source du WIM** : capture d'un **master sysprepé**, ou `install.wim` d'un ISO + apps via MDT ?
-- **Jonction de domaine** au déploiement : oui/non + **quel domaine** (`ecollege19.lan` ?) → renseigné
-  dans `CustomSettings.ini` (avec un compte de jonction dédié, hors dépôt).
+## Décisions actées
+- Image = **thin** (`install.wim` de l'ISO + pilotes/apps/jonction via WDS/unattend). *(Capture d'un master
+  sysprepé possible plus tard si on veut tout figer.)*
+- **Jonction `ecollege19.lan`** (dans `ImageUnattend.xml`).
 
 ## Ce que garde le dépôt
-Config MDT versionnable (`CustomSettings.ini`, `Bootstrap.ini` **sans secret**), scripts de
-personnalisation, notes de build, drivers-manifest. Le WIM et les secrets restent **hors dépôt**.
+Les `unattend/*.xml` (templates, **sans secret**), les manifests de pilotes/notes. WIM et secrets = **hors dépôt**.

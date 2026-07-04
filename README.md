@@ -13,21 +13,22 @@ notre stack self-hosted.
 - Usage = **provisioning / réimage à blanc EN MASSE** (bare-metal). La mise à niveau in-place (Win11)
   reste gérée par l'agent EPM.
 
-## Amorçage — voie retenue : **WDS (+ MDT)**, Secure Boot activé
+## Amorçage — voie retenue : **WDS seul (sans MDT)**, Secure Boot activé
 Les postes sont **UEFI récents avec Secure Boot ON** (les legacy sont remplacés). Secure Boot
-n'exécute qu'un bootloader **signé Microsoft** → on utilise **WDS** (binaires signés MS) + **MDT**
-pour la séquence de déploiement. C'est le « MDT en PXE » cible, **sans désactiver Secure Boot**.
-*(iPXE/HTTP Boot — cf. `tftp/` — est écarté car non signé MS ; conservé comme alternative si un jour
-Secure Boot OFF.)*
+n'exécute qu'un bootloader **signé Microsoft** → on utilise **WDS** (binaires signés MS). **MDT étant
+en fin de vie**, on ne l'utilise pas : WDS déploie **tout seul** via une **Install Image** + des
+**fichiers de réponse** (`unattend/`) + ses **packages de pilotes** (jonction `ecollege19.lan`,
+locale, partition). **Sans désactiver Secure Boot.**
+*(iPXE/HTTP Boot — cf. `tftp/` — écarté car non signé MS ; conservé comme alternative si Secure Boot OFF.)*
 
 ## Structure
 ```
-docs/    cadrage (epopee_pxe.md) + notes
-dhcp/    options 66/67 à poser sur srv-wvdnscollf (pointent vers WDS)
-wds/     VOIE RETENUE : mise en place WDS + MDT (Secure Boot natif)
-winpe/   personnalisation WinPE / deploy + unattend + drivers (via MDT)
-tftp/    ALTERNATIVE (Secure Boot OFF) : bootloader iPXE + menu.ipxe — non utilisé pour l'instant
-images/  WIM de référence — NON versionné (gros fichiers, cf. .gitignore)
+docs/      cadrage (epopee_pxe.md) + notes
+dhcp/      options 66/67 à poser sur srv-wvdnscollf (pointent vers WDS)
+wds/       VOIE RETENUE : mise en place WDS seul (Secure Boot natif, sans MDT)
+unattend/  fichiers de réponse WDS (WinPE + OS) : partition UEFI, locale, jonction domaine
+tftp/      ALTERNATIVE (Secure Boot OFF) : bootloader iPXE + menu.ipxe — non utilisé
+images/    WIM de référence — NON versionné (gros fichiers, cf. .gitignore)
 ```
 
 ## Lien avec la console EPM

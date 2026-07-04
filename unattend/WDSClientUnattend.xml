@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  WDSClientUnattend.xml — phase WinPE (amorçage WDS) : langue, partitionnement UEFI/GPT,
+  sélection de l'image d'installation, disque cible. À rattacher dans WDS :
+  Serveur WDS > Propriétés > Client > "Activer l'installation sans assistance" > x64 > ce fichier.
+  ⚠️ Les identifiants d'accès WDS (Login) sont sensibles : garder les vrais dans une copie locale
+     gitignorée (*.local.xml) ou laisser WinPE les demander. Adapter ImageName/ImageGroup.
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <SetupUILanguage><UILanguage>fr-FR</UILanguage></SetupUILanguage>
+      <InputLocale>fr-FR</InputLocale>
+      <SystemLocale>fr-FR</SystemLocale>
+      <UILanguage>fr-FR</UILanguage>
+      <UserLocale>fr-FR</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Setup" processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <WindowsDeploymentServices>
+        <Login>
+          <Credentials>
+            <Domain>ecollege19.lan</Domain>
+            <Username>&lt;COMPTE_ACCES_WDS&gt;</Username>
+            <Password>&lt;REMPLIR_HORS_DEPOT&gt;</Password>
+          </Credentials>
+        </Login>
+        <ImageSelection>
+          <InstallImage>
+            <ImageName>&lt;NOM_IMAGE_WIM&gt;</ImageName>
+            <ImageGroup>&lt;GROUPE_IMAGE&gt;</ImageGroup>
+          </InstallImage>
+          <InstallTo><DiskID>0</DiskID><PartitionID>3</PartitionID></InstallTo>
+        </ImageSelection>
+      </WindowsDeploymentServices>
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <!-- Schéma UEFI/GPT : EFI (260 Mo) + MSR (16 Mo) + Windows (reste) -->
+            <CreatePartition wcm:action="add"><Order>1</Order><Type>EFI</Type><Size>260</Size></CreatePartition>
+            <CreatePartition wcm:action="add"><Order>2</Order><Type>MSR</Type><Size>16</Size></CreatePartition>
+            <CreatePartition wcm:action="add"><Order>3</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>1</PartitionID><Format>FAT32</Format><Label>System</Label></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>2</PartitionID></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>3</Order><PartitionID>3</PartitionID><Format>NTFS</Format><Label>Windows</Label><Letter>C</Letter></ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+    </component>
+  </settings>
+</unattend>
