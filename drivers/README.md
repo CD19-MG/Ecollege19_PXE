@@ -17,6 +17,23 @@ modèle = ajouter son pack + un groupe filtré. Aucun MDT nécessaire.
 3. WDS applique, pour chaque poste, **le groupe dont le filtre correspond** → seuls les pilotes du modèle
    sont injectés. Un pack « fourre-tout » sans filtre marche aussi mais alourdit/ralentit — préférer les filtres.
 
+## Récupérer les packs HP — automatisé (`Get-HPDriverPacks.ps1`)
+Le script `Get-HPDriverPacks.ps1` (ce dossier) télécharge + extrait les driver packs des modèles HP
+du parc (un dossier INF par modèle), via **HP CMSL** :
+```powershell
+.\Get-HPDriverPacks.ps1 -OutRoot D:\DriverPacks -OsVer 23H2   # en admin, acces Internet
+```
+Repli manuel : `support.hp.com` → modèle → « Driver Pack » → extraire le SoftPaq dans un dossier.
+
+## Import + groupe filtré dans WDS (pas à pas)
+1. Console **WDS** → **Pilotes** → clic droit → **Ajouter un package de pilotes** → pointer le dossier
+   INF du modèle (ex. `D:\DriverPacks\HP Pro Mini 400 G9...`).
+2. Créer un **groupe de pilotes** (clic droit *Pilotes* → *Ajouter un groupe*) → nommer par modèle.
+3. Sur le groupe → **Filtres** : ajouter *Fabricant* (`Manufacturer`) et/ou *Modèle* (`Product Name`)
+   = valeurs exactes du poste (`Get-CimInstance Win32_ComputerSystem | ft Manufacturer,Model`).
+4. **Assigner** le package importé au groupe. WDS injectera ce groupe uniquement sur les postes
+   correspondant au filtre.
+
 ## Modèles actuels (à créer un groupe filtré chacun)
 - HP **Pro Mini 400 G9** Desktop PC
 - HP **ProDesk 400 G6** Desktop Mini
