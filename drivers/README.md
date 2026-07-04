@@ -34,13 +34,25 @@ Repli manuel : `support.hp.com` → modèle → « Driver Pack » → extraire l
 4. **Assigner** le package importé au groupe. WDS injectera ce groupe uniquement sur les postes
    correspondant au filtre.
 
-## Modèles actuels (à créer un groupe filtré chacun)
-- HP **Pro Mini 400 G9** Desktop PC
-- HP **ProDesk 400 G6** Desktop Mini
-- HP **EliteDesk 800 G5** Desktop Mini
-- HP **ProDesk 400 G6** SFF
-- HP **EliteDesk 800 G4** DM 35W
-- **Lenovo** <modèle à venir> → ajouter le pack Lenovo + un groupe filtré `Manufacturer=LENOVO` (+ modèle)
+## Libellés remontés par l'agent (Win32_ComputerSystem.Model)
+> ⚠️ Ces libellés **ne font PAS autant de packs** : plusieurs = **même plateforme HP (SysID)** vue
+> sous des noms différents (formats, BIOS, casse). On **regroupe par SysID** → moins de packs/groupes.
+> Le **filtre d'un groupe WDS accepte plusieurs libellés** (OR). `Get-HPDriverPacks.ps1` résout les
+> SysID, dédoublonne, et affiche le mapping libellé→plateforme à utiliser dans les filtres.
+
+- HP EliteDesk 800 **G4** DM 35W
+- HP EliteDesk 800 **G5** · « G5 » / « Desktop Mini » / « DM » → probablement **1 seul pack**
+- HP Pro Mini **400 G9** Desktop PC
+- HP ProDesk 400 **G4** SFF
+- HP ProDesk 400 **G6** · « Desktop Mini » / « SFF » → 1 (ou 2 selon le format)
+- **Lenovo** <à venir> → pack Lenovo + groupe filtré `Manufacturer=LENOVO` (⚠️ nom commercial dans
+  `Win32_ComputerSystemProduct.Version`, pas dans `Model` qui = le code type).
+
+## Alternative simple (moins de groupes)
+Si gérer un groupe par plateforme est fastidieux : **un seul groupe « HP »** filtré `Manufacturer=HP`
+avec **tous les packs** → Windows Setup n'installe que les pilotes **correspondant au PnP** de la machine.
+Plus simple et robuste aux variations de nom ; en contrepartie, le magasin de pilotes est plus gros
+(scan un peu plus long). Idéal pour démarrer, on affinera par plateforme si besoin.
 
 ## Astuce
 Pour connaître les chaînes exactes de filtre d'un poste : `wmic computersystem get Manufacturer,Model`

@@ -1,18 +1,15 @@
 <#
 .SYNOPSIS
-  Telecharge + extrait les Driver Packs HP (format INF, prets pour import WDS) pour les modeles
-  du parc, un dossier par modele. Utilise HP CMSL (HP Client Management Script Library).
+  Telecharge + extrait les Driver Packs HP (INF, prets pour import WDS) en DEDOUBLONNANT par
+  plateforme (SysID) : plusieurs libelles commerciaux = souvent le meme pack. Utilise HP CMSL.
 
 .DESCRIPTION
-  Pour chaque modele : resout l'identifiant plateforme (SysID) depuis le nom, puis construit le
-  driver pack Win11 dans <OutRoot>\<Modele>\. Ces dossiers (INF) s'importent ensuite dans WDS
-  (console WDS > Pilotes > Ajouter un package de pilotes > pointer le dossier).
+  Pour chaque nom de modele : resout le SysID (plateforme). Les modeles partageant un SysID
+  partagent UN pack (telecharge une seule fois). Affiche le mapping nom -> SysID pour savoir
+  quels libelles mettre dans le filtre de chaque GROUPE WDS.
 
-  Prerequis : Windows + acces Internet + admin. Le module HPCMSL est installe s'il manque.
-  Adapter -OsVer selon l'edition deployee (ex. "23H2"). Lancer en administrateur.
-
-  IMPORTANT : fichier en ASCII pur (aucun accent / signe typographique) — cf. convention du projet
-  (Windows PowerShell 5.1 lit un .ps1 sans BOM en codepage ANSI). Ne pas reintroduire d'accents.
+  Prerequis : Windows + acces Internet + admin. HPCMSL installe s'il manque. Adapter -OsVer.
+  IMPORTANT : ASCII pur (pas d'accent) - convention .ps1 du projet. Lancer en administrateur.
 
 .EXAMPLE
   .\Get-HPDriverPacks.ps1 -OutRoot D:\DriverPacks -OsVer 23H2
@@ -24,46 +21,54 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-# Modeles HP du parc (noms tels qu'affiches par Win32_ComputerSystem.Model / la fiche EPM).
+# Tous les libelles remontes par l'agent (Win32_ComputerSystem.Model).
 $models = @(
-    'HP Pro Mini 400 G9 Desktop PC',
-    'HP ProDesk 400 G6 Desktop Mini PC',
+    'HP EliteDesk 800 G4 DM 35W',
+    'HP Elitedesk 800 G5',
     'HP EliteDesk 800 G5 Desktop Mini',
-    'HP ProDesk 400 G6 SFF',
-    'HP EliteDesk 800 G4 DM 35W'
+    'HP EliteDesk 800 G5 DM',
+    'HP Pro Mini 400 G9 Desktop PC',
+    'HP ProDesk 400 G4 SFF',
+    'HP ProDesk 400 G6 Desktop Mini PC',
+    'HP ProDesk 400 G6 SFF'
 )
 
-# 1. Module HP CMSL
 if (-not (Get-Module -ListAvailable -Name HPCMSL)) {
     Write-Host "Installation du module HPCMSL..." -ForegroundColor Cyan
     Install-Module -Name HPCMSL -Force -AcceptLicense -Scope AllUsers
 }
 Import-Module HPCMSL
-
 New-Item -ItemType Directory -Force -Path $OutRoot | Out-Null
 
+# 1. Resoudre le SysID de chaque libelle + regrouper par plateforme
+$byPlat = @{}
 foreach ($m in $models) {
-    Write-Host "=== $m ===" -ForegroundColor Yellow
     try {
-        # SysID (plateforme) depuis le nom commercial
         $sysId = (Get-HPDeviceDetails -Name $m -Like | Select-Object -First 1).SystemID
-        if (-not $sysId) {
-            Write-Warning "SysID introuvable pour '$m' - verifier le libelle exact."
-            continue
-        }
-        $safe = ($m -replace '[\\/:*?<>|]', '_')
-        $dest = Join-Path $OutRoot $safe
-        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    } catch { $sysId = $null }
+    if (-not $sysId) { Write-Warning "SysID introuvable pour '$m' (verifier le libelle)."; continue }
+    if (-not $byPlat.ContainsKey($sysId)) { $byPlat[$sysId] = @() }
+    $byPlat[$sysId] += $m
+}
 
-        Write-Host "SysID $sysId -> construction du driver pack Win11 $OsVer dans $dest" -ForegroundColor Cyan
+# 2. Un pack par plateforme (dedoublonne)
+foreach ($sysId in $byPlat.Keys) {
+    $names = $byPlat[$sysId]
+    $dest  = Join-Path $OutRoot $sysId
+    Write-Host "`n=== Plateforme $sysId ===" -ForegroundColor Yellow
+    Write-Host ("  Modeles : " + ($names -join ' | ')) -ForegroundColor Gray
+    try {
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
         New-HPDriverPack -Platform $sysId -OS win11 -OSVer $OsVer -Path $dest
-        Write-Host "OK : $dest" -ForegroundColor Green
-    }
-    catch {
-        Write-Warning "Echec pour '$m' : $($_.Exception.Message)"
-        Write-Warning "  Repli manuel : telecharger le Driver Pack du modele sur support.hp.com, l'extraire, l'importer dans WDS."
+        Write-Host "  OK -> $dest" -ForegroundColor Green
+    } catch {
+        Write-Warning "  Echec $sysId : $($_.Exception.Message) (repli : driver pack manuel sur support.hp.com)"
     }
 }
 
-Write-Host "Termine. Importer chaque dossier de $OutRoot dans WDS (Pilotes > Ajouter un package)," -ForegroundColor Green
-Write-Host "puis creer un GROUPE filtre par modele (Fabricant/Modele). Cf. drivers/README.md." -ForegroundColor Green
+# 3. Recap : mapping plateforme -> libelles (pour les filtres des groupes WDS)
+Write-Host "`n===== A FAIRE DANS WDS : 1 GROUPE PAR PLATEFORME, filtre = les libelles ci-dessous =====" -ForegroundColor Cyan
+foreach ($sysId in $byPlat.Keys) {
+    Write-Host ("  [$sysId] " + ($byPlat[$sysId] -join '  ||  ')) -ForegroundColor White
+}
+Write-Host "Importer chaque dossier de $OutRoot dans WDS, l'assigner a son groupe, y mettre le filtre Modele (valeurs multiples = OR)." -ForegroundColor Cyan
