@@ -12,9 +12,11 @@ winpe/mount/
 winpe/media/
 winpe/*.wim
 
-# Secrets éventuels (comptes de jonction de domaine dans unattend, etc.)
+# Secrets éventuels (comptes de jonction de domaine, mots de passe MDT, etc.)
 *.secret
 unattend.local.xml
+*.local.ini
+
 
 # Divers
 *.log
