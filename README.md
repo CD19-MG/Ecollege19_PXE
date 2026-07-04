@@ -13,17 +13,20 @@ notre stack self-hosted.
 - Usage = **provisioning / réimage à blanc EN MASSE** (bare-metal). La mise à niveau in-place (Win11)
   reste gérée par l'agent EPM.
 
-## Menu PXE
-1. **Amorcer le disque local** — entrée par **défaut** (sécurité : pas de réimage accidentel).
-2. **Déployer Windows** — WinPE → apply WIM + unattend + drivers.
-3. **HBCD** (Hiren's BootCD PE) — secours / diagnostic.
+## Amorçage — voie retenue : **WDS (+ MDT)**, Secure Boot activé
+Les postes sont **UEFI récents avec Secure Boot ON** (les legacy sont remplacés). Secure Boot
+n'exécute qu'un bootloader **signé Microsoft** → on utilise **WDS** (binaires signés MS) + **MDT**
+pour la séquence de déploiement. C'est le « MDT en PXE » cible, **sans désactiver Secure Boot**.
+*(iPXE/HTTP Boot — cf. `tftp/` — est écarté car non signé MS ; conservé comme alternative si un jour
+Secure Boot OFF.)*
 
 ## Structure
 ```
 docs/    cadrage (epopee_pxe.md) + notes
-dhcp/    options 66/67 à poser sur srv-wvdnscollf (exemples/notes)
-tftp/    bootloader iPXE/PXELinux + menu (menu.ipxe)
-winpe/   scripts de build WinPE + déploiement WIM + unattend + drivers
+dhcp/    options 66/67 à poser sur srv-wvdnscollf (pointent vers WDS)
+wds/     VOIE RETENUE : mise en place WDS + MDT (Secure Boot natif)
+winpe/   personnalisation WinPE / deploy + unattend + drivers (via MDT)
+tftp/    ALTERNATIVE (Secure Boot OFF) : bootloader iPXE + menu.ipxe — non utilisé pour l'instant
 images/  WIM de référence — NON versionné (gros fichiers, cf. .gitignore)
 ```
 
