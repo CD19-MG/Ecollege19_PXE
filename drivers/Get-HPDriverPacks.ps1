@@ -16,8 +16,13 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$OutRoot = "D:\DriverPacks",
-    [string]$OsVer   = "23H2"
+    [string]$OutRoot   = "D:\DriverPacks",
+    [string]$OsVer     = "23H2",
+    # Methode FIABLE : passer directement les SysID (ID de carte mere HP, 4 hex).
+    # Les recuperer sur un poste de chaque modele : (Get-CimInstance Win32_BaseBoard).Product
+    # Si fourni, on ignore la resolution par nom (peu fiable : les libelles Win32.Model ne
+    # matchent pas toujours le catalogue HP -> "SysID introuvable").
+    [string[]]$Platforms = @()
 )
 $ErrorActionPreference = 'Stop'
 
@@ -44,6 +49,21 @@ if (-not (Get-Module -ListAvailable -Name HPCMSL)) {
 }
 Import-Module HPCMSL
 New-Item -ItemType Directory -Force -Path $OutRoot | Out-Null
+
+# Mode FIABLE : SysID fournis directement (-Platforms) -> 1 pack par SysID, sans resolution par nom.
+if ($Platforms.Count) {
+    foreach ($sysId in ($Platforms | Select-Object -Unique)) {
+        $dest = Join-Path $OutRoot $sysId
+        Write-Host "`n=== Plateforme $sysId (fournie) ===" -ForegroundColor Yellow
+        try {
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            New-HPDriverPack -Platform $sysId -OS win11 -OSVer $OsVer -Path $dest
+            Write-Host "  OK -> $dest" -ForegroundColor Green
+        } catch { Write-Warning "  Echec $sysId : $($_.Exception.Message)" }
+    }
+    Write-Host "`nImporter chaque dossier de $OutRoot dans WDS + groupe filtre par modele. Cf. README." -ForegroundColor Cyan
+    return
+}
 
 # 1. Resoudre le SysID de chaque libelle + regrouper par plateforme
 $byPlat = @{}
