@@ -22,8 +22,9 @@ foreach ($c in 'WinPE-WMI','WinPE-NetFX','WinPE-Scripting','WinPE-PowerShell','W
     Dism /Add-Package /Image:C:\WinPE_amd64\mount /PackagePath:"$ocs\$c.cab"
 }
 
-# Injecter le script + le shell de lancement
-Copy-Item .\deploy.ps1     C:\WinPE_amd64\mount\deploy.ps1 -Force
+# Injecter le BOOTSTRAP (stable) + le shell de lancement. deploy.ps1 n'est PAS fige dans le
+# WinPE : il vit sur le partage (voir plus bas) -> editable sans reconstruire le WinPE.
+Copy-Item .\bootstrap.ps1  C:\WinPE_amd64\mount\bootstrap.ps1 -Force
 Copy-Item .\winpeshl.ini   C:\WinPE_amd64\mount\Windows\System32\winpeshl.ini -Force
 
 # (option) pilotes reseau/stockage dans le WinPE si une carte n'est pas reconnue :
@@ -36,12 +37,20 @@ Dism /Unmount-Image /MountDir:C:\WinPE_amd64\mount /Commit
 ## Importer dans WDS + partage de déploiement
 1. WDS → **Images de démarrage** → importer `C:\WinPE_amd64\media\sources\boot.wim` (ce WinPE custom).
 2. Créer un **partage** `\\stats\Deploy$` (lecture pour `svc.wds`) contenant :
-   - `images\` : les WIM (`install-pro-edu.wim`, `install-pro.wim`, ou `master.wim`) ;
-   - `drivers\` : les packs HP (INF, récursif) ;
+   - **`deploy.ps1`** (à la RACINE du partage) — le script de déploiement, **éditable ici** sans rebuild ;
+   - `images\` : les WIM (`Win11.wim` multi-éditions, ou par édition) ;
+   - `drivers\` : les packs HP en dossiers **par SysID** (`8AC9\`, `8591\`…), récursif ;
    - `unattend\ImageUnattend.xml` (jonction + admin local + locale — copie **remplie**, hors dépôt).
-3. Options DHCP 66/67 inchangées → le poste PXE-boote ce WinPE → **`deploy.ps1` s'exécute** (partition
-   GPT, apply WIM, unattend, pilotes, bcdboot, reboot).
+3. Options DHCP 66/67 inchangées → le poste PXE-boote le WinPE → `wpeinit` → **`bootstrap.ps1`**
+   (monte le partage) → **`\\...\Deploy$\deploy.ps1`** (partition GPT, apply WIM, unattend, pilotes,
+   bcdboot, reboot). Journal dans `\\...\Deploy$\logs\`.
+
+## Pattern bootstrap (pourquoi)
+`bootstrap.ps1` (figé, stable) monte le partage et lance `deploy.ps1` **depuis le partage** → on
+**édite `deploy.ps1` sur le partage** sans jamais reconstruire le WinPE. En cas d'erreur : **pause
+`Read-Host`** (l'écran reste, lisible) + **transcript** dans `\logs\`.
 
 ## Fichiers de ce dossier
-- `deploy.ps1` : le déploiement (à adapter : `$Server`, noms de WIM). ASCII pur.
-- `winpeshl.ini` : lance `wpeinit` puis `deploy.ps1` au démarrage du WinPE.
+- `bootstrap.ps1` : **figé dans le WinPE** — monte le partage (creds `svc.wds`) et lance `deploy.ps1` du partage. Adapter `$Server`.
+- `deploy.ps1` : **à copier à la racine du partage** — le déploiement. Éditable sans rebuild. ASCII pur.
+- `winpeshl.ini` : lance `wpeinit` puis `bootstrap.ps1`.
