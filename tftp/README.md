@@ -1,5 +1,13 @@
 # TFTP — bootloader + menu PXE
 
+> **MAJ (iPXE 2.0.0) : iPXE gère désormais Secure Boot** via des **shims signés Microsoft**
+> (`ipxe-shim.efi` / `snponly-shim.efi`, cf. https://ipxe.org/secboot) → **out-of-the-box, sans
+> enrôlement MOK, scalable**. iPXE n'est donc PLUS réservé au « Secure Boot OFF » : il devient une
+> **alternative viable pour REMPLACER WDS** (transport plus léger, + UEFI HTTP Boot possible), une
+> fois le pipeline WDS actuel validé. Contrainte : binaires précompilés signés (custom via
+> `autoexec.ipxe`, pas de build maison). Chaîne iPXE → WinPE (wimboot/bootmgr) à tester sous Secure Boot.
+
+
 Le serveur TFTP (à MARBOT) sert le bootloader amorcé par les postes (via l'option 067 du DHCP) puis
 un **menu**. Les gros fichiers (WinPE, WIM) se servent de préférence en **HTTP** (plus rapide que TFTP).
 
