@@ -14,7 +14,26 @@ $DrvDir   = "$Share\drivers"
 $Unattend = "$Share\unattend\ImageUnattend.xml"
 $Disk     = 0
 
+# --- Remontee d'etat vers le dashboard (Phase 3b). Best-effort : ne bloque JAMAIS le deploiement.
+$ReportUrl   = 'https://stats.ecollege19.lan/pc/api/pxe/report'   # hostname du certificat (srv-pxe = alias)
+$ReportToken = '<JETON_PXE>'                                      # a renseigner sur le partage (hors depot)
+$JobId  = ([guid]::NewGuid()).Guid
+$ImgName = ''
+$Mac   = ''; try { $Mac   = @(Get-CimInstance Win32_NetworkAdapterConfiguration -EA SilentlyContinue | Where-Object { $_.IPEnabled }).MACAddress | Select-Object -First 1 } catch {}
+$Model = ''; try { $Model = (Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).Model } catch {}
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+try { [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } } catch {}  # WinPE, LAN : on ne valide pas le cert
+
+function Report($phase, $status, $msg) {
+    if (-not $ReportToken -or $ReportToken -like '*JETON*') { return }   # non configure -> silencieux
+    try {
+        $body = @{ job_id=$JobId; mac=$Mac; hostname=$env:COMPUTERNAME; model=$Model; action='deploy'; image=$ImgName; phase=$phase; status=$status; message=$msg } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Uri $ReportUrl -Method Post -Headers @{ 'X-PXE-Token'=$ReportToken } -ContentType 'application/json' -Body $body -TimeoutSec 8 | Out-Null
+    } catch { }   # une remontee ratee n'interrompt pas le deploiement
+}
+
 function Fail($m){
+    Report 'erreur' 'error' $m
     Write-Host "`nERREUR: $m" -ForegroundColor Red
     try { Stop-Transcript | Out-Null } catch {}
     Read-Host 'Note l erreur ci-dessus, puis tape Entree pour redemarrer'
@@ -59,6 +78,8 @@ try {
     }
     if ($sel -lt 0 -or $sel -ge $paths.Count) { Fail 'Aucune image selectionnee / choix hors liste.' }
     $wim = $paths[$sel]
+    $ImgName = Split-Path $wim -Leaf
+    Report 'demarrage' 'running' "Image $ImgName"
 
     # Index : auto si le WIM ne contient qu'une image, sinon on demande
     $imgs = @(Get-WindowsImage -ImagePath $wim)
@@ -90,11 +111,13 @@ format quick fs=ntfs label=Windows
 assign letter=W
 exit
 "@
+    Report 'partitionnement' 'running' "Disque $Disk"
     $dp | Out-File -Encoding ascii X:\dp.txt
     diskpart /s X:\dp.txt
     if ($LASTEXITCODE -ne 0) { Fail "diskpart a echoue (code $LASTEXITCODE)." }
 
     # Apply du WIM
+    Report 'application' 'running' "index $index"
     Write-Host "Application de l'image (peut prendre plusieurs minutes)..." -ForegroundColor Cyan
     dism /Apply-Image /ImageFile:"$wim" /Index:$index /ApplyDir:W:\
     if ($LASTEXITCODE -ne 0) { Fail "dism /Apply-Image a echoue (code $LASTEXITCODE)." }
@@ -104,6 +127,7 @@ exit
     Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force
 
     # Pilotes : dossier du modele (nomme par SysID) sinon tous (match PnP)
+    Report 'pilotes' 'running' $Model
     if (Test-Path $DrvDir) {
         $sysId = (Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue).Product
         $modelDir = if ($sysId) { Join-Path $DrvDir $sysId } else { $null }
@@ -117,9 +141,11 @@ exit
     }
 
     # Rendre bootable (UEFI)
+    Report 'amorcage' 'running' 'bcdboot'
     bcdboot W:\Windows /s S: /f UEFI
     if ($LASTEXITCODE -ne 0) { Fail "bcdboot a echoue (code $LASTEXITCODE)." }
 
+    Report 'termine' 'ok' 'Deploiement termine, redemarrage'
     Write-Host "OK - redemarrage sur le disque..." -ForegroundColor Green
     try { Stop-Transcript | Out-Null } catch {}
     Start-Sleep 3

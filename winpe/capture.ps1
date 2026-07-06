@@ -15,7 +15,26 @@ $Share    = "\\$Server\Deploy$"
 $ImgDir    = "$Share\images"
 $ModelDir  = "$ImgDir\modeles"   # les captures vont ici -> categorie "par modele" au deploiement
 
+# --- Remontee d'etat vers le dashboard (Phase 3b). Best-effort : ne bloque JAMAIS la capture.
+$ReportUrl   = 'https://stats.ecollege19.lan/pc/api/pxe/report'   # hostname du certificat (srv-pxe = alias)
+$ReportToken = '<JETON_PXE>'                                      # a renseigner sur le partage (hors depot)
+$JobId  = ([guid]::NewGuid()).Guid
+$ImgName = ''
+$Mac   = ''; try { $Mac   = @(Get-CimInstance Win32_NetworkAdapterConfiguration -EA SilentlyContinue | Where-Object { $_.IPEnabled }).MACAddress | Select-Object -First 1 } catch {}
+$Model = ''; try { $Model = (Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).Model } catch {}
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+try { [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true } } catch {}  # WinPE, LAN : on ne valide pas le cert
+
+function Report($phase, $status, $msg) {
+    if (-not $ReportToken -or $ReportToken -like '*JETON*') { return }
+    try {
+        $body = @{ job_id=$JobId; mac=$Mac; hostname=$env:COMPUTERNAME; model=$Model; action='capture'; image=$ImgName; phase=$phase; status=$status; message=$msg } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Uri $ReportUrl -Method Post -Headers @{ 'X-PXE-Token'=$ReportToken } -ContentType 'application/json' -Body $body -TimeoutSec 8 | Out-Null
+    } catch { }
+}
+
 function Fail($m){
+    Report 'erreur' 'error' $m
     Write-Host "`nERREUR: $m" -ForegroundColor Red
     try { Stop-Transcript | Out-Null } catch {}
     Read-Host 'Note l erreur ci-dessus, puis tape Entree pour redemarrer'
@@ -80,10 +99,13 @@ try {
         Remove-Item $dest -Force
     }
 
+    $ImgName = "$name.wim"
+    Report 'application' 'running' "Capture $ImgName"
     Write-Host "Capture de $win -> images\modeles\$name.wim (plusieurs minutes)..." -ForegroundColor Cyan
     dism /Capture-Image /ImageFile:"$dest" /CaptureDir:$win\ /Name:"$name" /Compress:max
     if ($LASTEXITCODE -ne 0) { Fail "dism /Capture-Image a echoue (code $LASTEXITCODE)." }
 
+    Report 'termine' 'ok' "Image $ImgName capturee"
     Write-Host ''
     Write-Host "OK - image disponible au deploiement : modeles\$name.wim" -ForegroundColor Green
     Write-Host "Elle apparaitra en tete de liste (categorie MODELE) au prochain PXE ([1] Installer)." -ForegroundColor Green
