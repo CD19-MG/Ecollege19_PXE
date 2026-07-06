@@ -38,22 +38,31 @@ Dism /Unmount-Image /MountDir:C:\WinPE_amd64\mount /Commit
 
 ## Importer dans WDS + partage de déploiement
 1. WDS → **Images de démarrage** → importer `C:\WinPE_amd64\media\sources\boot.wim` (ce WinPE custom).
-2. Créer un **partage** `\\stats\Deploy$` (lecture pour `svc.wds`) contenant :
-   - **`deploy.ps1`** (à la RACINE du partage) — le script de déploiement, **éditable ici** sans rebuild ;
-   - `images\` : les WIM (`Win11.wim` multi-éditions, ou par édition) ;
+2. Créer un **partage** `\\stats\Deploy$` pour `svc.wds` (**Lecture** partout, **Modifier sur `images\`**
+   pour permettre la capture) contenant, **à la RACINE** (tous éditables sans rebuild) :
+   - **`menu.ps1`** — menu au démarrage : `[1]` déployer / `[2]` capturer ;
+   - **`deploy.ps1`** — déploiement (partition GPT, apply WIM, unattend, pilotes, bcdboot, reboot) ;
+   - **`capture.ps1`** — capture d'une image de référence → écrit dans `images\`, nom = modèle auto ;
+   - `images\` : les WIM déployables (éditions `Win11_Pro.wim`… **et** les images capturées par modèle) ;
    - `drivers\` : les packs HP en dossiers **par SysID** (`8AC9\`, `8591\`…), récursif ;
    - `unattend\ImageUnattend.xml` (jonction + admin local + locale — copie **remplie**, hors dépôt).
 3. Options DHCP 66/67 inchangées → le poste PXE-boote le WinPE → `wpeinit` → **`bootstrap.ps1`**
-   (monte le partage) → **`\\...\Deploy$\deploy.ps1`** (partition GPT, apply WIM, unattend, pilotes,
-   bcdboot, reboot). Journal dans `\\...\Deploy$\logs\`.
+   (monte le partage) → **`menu.ps1`** → `deploy.ps1` ou `capture.ps1`. Journal dans `\\...\Deploy$\logs\`.
 
 ## Pattern bootstrap (pourquoi)
-`bootstrap.ps1` (figé, stable) monte le partage et lance `deploy.ps1` **depuis le partage** → on
-**édite `deploy.ps1` sur le partage** sans jamais reconstruire le WinPE. En cas d'erreur : **pause
-`Read-Host`** (l'écran reste, lisible) + **transcript** dans `\logs\`.
+`bootstrap.ps1` (figé, stable) monte le partage et lance **`menu.ps1` depuis le partage** (fallback
+`deploy.ps1` si absent) → on **édite menu/deploy/capture sur le partage** sans jamais reconstruire le
+WinPE. En cas d'erreur : **pause `Read-Host`** (l'écran reste, lisible) + **transcript** dans `\logs\`.
+
+## Boucle capture → déploiement
+`capture.ps1` écrit **directement dans `images\`** (d'où le droit *Modifier* pour `svc.wds`) → l'image
+capturée **apparaît aussitôt** dans la liste de `deploy.ps1`. Prérequis : le poste modèle a été
+généralisé via `../capture/Preparer-la-capture.cmd` (sysprep). Détail : `../capture/README.md`.
 
 ## Fichiers de ce dossier
-- `bootstrap.ps1` : modèle **figé dans le WinPE** — monte le partage (creds `svc.wds`, mot de passe **figé** pour l'imaging sans saisie) et lance `deploy.ps1` du partage. `$Pass` = placeholder.
+- `bootstrap.ps1` : modèle **figé dans le WinPE** — monte le partage (creds `svc.wds`, mot de passe **figé** pour l'imaging sans saisie) et lance `menu.ps1` du partage. `$Pass` = placeholder.
 - `bootstrap.local.ps1` : **copie gitignorée** de `bootstrap.ps1` avec le **vrai** mot de passe `svc.wds`. C'est ELLE qu'on injecte (renommée `bootstrap.ps1`) dans le WinPE. **Jamais commitée.**
+- `menu.ps1` : **à copier à la racine du partage** — menu déployer/capturer. Éditable sans rebuild.
 - `deploy.ps1` : **à copier à la racine du partage** — le déploiement. Éditable sans rebuild. ASCII pur.
+- `capture.ps1` : **à copier à la racine du partage** — la capture d'image de référence. Éditable sans rebuild. ASCII pur.
 - `winpeshl.ini` : lance `wpeinit` puis `bootstrap.ps1`.

@@ -17,6 +17,8 @@ function Fail($m){ Write-Host "`nERREUR (bootstrap): $m" -ForegroundColor Red; R
 try {
     Write-Host "Connexion a $Share (utilisateur $User)" -ForegroundColor Cyan
     cmd /c "net use $Share /user:$User $Pass"
-    if (-not (Test-Path "$Share\deploy.ps1")) { Fail "deploy.ps1 introuvable sur $Share (creds ? reseau ? alias CNAME srv-pxe non autorise en SMB ? carte reseau non reconnue ?)." }
-    & "$Share\deploy.ps1"
+    # Lance le menu (deploiement / capture) s'il existe, sinon directement le deploiement.
+    if     (Test-Path "$Share\menu.ps1")   { & "$Share\menu.ps1" }
+    elseif (Test-Path "$Share\deploy.ps1") { & "$Share\deploy.ps1" }
+    else { Fail "Ni menu.ps1 ni deploy.ps1 sur $Share (creds ? reseau ? alias CNAME srv-pxe non autorise en SMB ? carte reseau non reconnue ?)." }
 } catch { Fail $_.Exception.Message }
