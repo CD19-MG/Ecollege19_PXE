@@ -41,5 +41,19 @@ Poste UEFI (Secure Boot ON) → PXE → `wdsmgfw.efi` (signé) → **WinPE** (si
 - **Pilotes par groupes filtrés** par modèle (cf. `../drivers/`), extensible (Lenovo à venir).
 - **Jonction `ecollege19.lan`** (dans `ImageUnattend.xml`).
 
+## Optionnel : image de référence capturée (« thick », éviter de réinstaller les logiciels)
+En plus de l'image thin, on peut déployer un **master** avec les logiciels déjà installés :
+1. **Poste de référence** : OS + apps communes + réglages, **en groupe de travail** (NE PAS joindre le domaine).
+2. **Sysprep** : `C:\Windows\System32\Sysprep\sysprep.exe /generalize /oobe /shutdown`
+   (option `CopyProfile=true` dans un unattend sysprep si le profil par défaut est personnalisé).
+3. **Image de capture WDS** : *Images de démarrage → clic droit sur le boot.wim → Créer une image de capture* → l'importer.
+4. **Capturer** : PXE-boot le poste sysprepé → choisir l'**Image de capture** → l'assistant capture `C:`
+   dans un WIM → upload comme **nouvelle image d'installation**.
+5. **Déployer** ce WIM + rattacher `../unattend/ImageUnattend.xml` (jonction/locale/admin) comme d'habitude.
+
+**Reco = hybride** : master = OS + apps **stables** ; apps **volatiles** = via l'agent EPM (winget/packages)
+après déploiement → rapide ET maintenable. Les **pilotes** restent injectés par modèle par WDS (le master
+n'a pas besoin des drivers de tous les modèles ; `/generalize` les retire).
+
 ## Ce que garde le dépôt
 Les `unattend/*.xml` (templates, **sans secret**), les manifests de pilotes/notes. WIM et secrets = **hors dépôt**.
