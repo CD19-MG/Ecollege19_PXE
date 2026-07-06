@@ -20,7 +20,11 @@
                xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
       <Identification>
         <JoinDomain>ecollege19.lan</JoinDomain>
-        <!-- <MachineObjectOU>OU=Ordinateurs,OU=&lt;college&gt;,DC=ecollege19,DC=lan</MachineObjectOU> -->
+        <!-- Cible de l'objet ordinateur. Si ABSENT/commente -> conteneur par defaut
+             "CN=Computers" (c'est un CONTAINER : prefixe CN, PAS OU). Pour une vraie OU
+             creee dans l'AD, utiliser OU=... ; ex : OU=Postes,OU=MARBOT,DC=ecollege19,DC=lan.
+             Piege : "OU=Computers" n'existe PAS -> jonction refusee. Le defaut est CN=Computers. -->
+        <!-- <MachineObjectOU>CN=Computers,DC=ecollege19,DC=lan</MachineObjectOU> -->
         <Credentials>
           <Domain>ecollege19.lan</Domain>
           <Username>&lt;COMPTE_DE_JONCTION&gt;</Username>
@@ -56,9 +60,17 @@
                xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
       <OOBE>
         <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
         <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
         <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
         <ProtectYourPC>3</ProtectYourPC>
+        <!-- Saute les pages OOBE machine/utilisateur ("Qui utilisera cet appareil ?").
+             Deconseille par MS mais fiable et adapte a une image JOINTE AU DOMAINE (les comptes
+             viennent de l'AD, pas de compte local a creer). Sans ca, l'OOBE s'arrete sur la
+             creation de compte meme apres jonction reussie. -->
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
       </OOBE>
       <UserAccounts>
         <!-- Definit le mot de passe du compte Administrateur LOCAL integre (active en specialize
