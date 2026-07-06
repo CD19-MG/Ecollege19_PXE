@@ -71,10 +71,18 @@ exit
     New-Item -ItemType Directory -Force -Path W:\Windows\Panther | Out-Null
     Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force
 
-    # 7. Injection des pilotes (offline, recursif ; Windows garde ceux qui matchent)
+    # 7. Injection des pilotes : cible le dossier du MODELE (nomme par SysID = Win32_BaseBoard.Product,
+    #    ex. 8AC9), sinon replie sur TOUS les pilotes (/Recurse) et laisse Windows matcher par PnP.
     if (Test-Path $DrvDir) {
-        Write-Host "Injection des pilotes..." -ForegroundColor Cyan
-        dism /Image:W:\ /Add-Driver /Driver:$DrvDir /Recurse
+        $sysId = (Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue).Product
+        $modelDir = if ($sysId) { Join-Path $DrvDir $sysId } else { $null }
+        if ($modelDir -and (Test-Path $modelDir)) {
+            Write-Host "Pilotes du modele $sysId (dossier dedie)..." -ForegroundColor Cyan
+            dism /Image:W:\ /Add-Driver /Driver:$modelDir /Recurse
+        } else {
+            Write-Host "SysID '$sysId' sans dossier dedie -> injection de TOUS les pilotes (match PnP)..." -ForegroundColor Cyan
+            dism /Image:W:\ /Add-Driver /Driver:$DrvDir /Recurse
+        }
     }
 
     # 8. Rendre bootable (UEFI)
