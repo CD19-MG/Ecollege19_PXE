@@ -29,13 +29,25 @@ try {
     Write-Host "=== Deploiement eCollege19 (WinPE) ===" -ForegroundColor Cyan
     if (-not (Test-Path $ImgDir)) { Fail "Dossier $ImgDir injoignable." }
 
-    # Choix du WIM + index (edition)
-    $wims = Get-ChildItem -Path $ImgDir -Filter *.wim
+    # Choix de l'edition = choix du fichier WIM (un WIM par edition : Pro, Pro Education...)
+    $wims = @(Get-ChildItem -Path $ImgDir -Filter *.wim | Sort-Object Name)
     if (-not $wims) { Fail "Aucun .wim dans $ImgDir." }
+    Write-Host "`nEditions disponibles :" -ForegroundColor Cyan
     for ($i=0; $i -lt $wims.Count; $i++) { Write-Host "  [$i] $($wims[$i].Name)" }
-    $wim = $wims[[int](Read-Host 'Numero du WIM')].FullName
-    dism /Get-ImageInfo /ImageFile:$wim
-    $index = Read-Host 'Index a appliquer (edition, ex. Pro Education)'
+    $sel = [int](Read-Host 'Numero de l edition a deployer')
+    if ($sel -lt 0 -or $sel -ge $wims.Count) { Fail "Choix hors liste." }
+    $wim = $wims[$sel].FullName
+
+    # Index : auto si le WIM ne contient qu'une image, sinon on demande
+    $imgs = @(Get-WindowsImage -ImagePath $wim)
+    if ($imgs.Count -eq 1) {
+        $index = $imgs[0].ImageIndex
+        Write-Host "Image : $($imgs[0].ImageName) (index $index)" -ForegroundColor Green
+    } else {
+        Write-Host "`nPlusieurs images dans ce WIM :" -ForegroundColor Cyan
+        foreach ($im in $imgs) { Write-Host "  index $($im.ImageIndex) : $($im.ImageName)" }
+        $index = [int](Read-Host 'Index a appliquer')
+    }
 
     if ((Read-Host "Taper OUI pour EFFACER le disque $Disk et reinstaller") -ne 'OUI') { Fail 'Annule par l operateur.' }
 
@@ -59,7 +71,7 @@ exit
 
     # Apply du WIM
     Write-Host "Application de l'image (peut prendre plusieurs minutes)..." -ForegroundColor Cyan
-    dism /Apply-Image /ImageFile:$wim /Index:$index /ApplyDir:W:\
+    dism /Apply-Image /ImageFile:"$wim" /Index:$index /ApplyDir:W:\
     if ($LASTEXITCODE -ne 0) { Fail "dism /Apply-Image a echoue (code $LASTEXITCODE)." }
 
     # Unattend (jonction + admin local + locale) -> traite au 1er boot
