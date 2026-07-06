@@ -12,6 +12,7 @@ $Share    = "\\$Server\Deploy$"
 $ImgDir   = "$Share\images"
 $DrvDir   = "$Share\drivers"
 $Unattend = "$Share\unattend\ImageUnattend.xml"
+$CaptureCmd = "$Share\Preparer-la-capture.cmd"   # depose dans un dossier ADMIN-ONLY lors d'une install NUE
 $Disk     = 0
 
 # --- Remontee d'etat vers le dashboard (Phase 3b). Best-effort : ne bloque JAMAIS le deploiement.
@@ -78,6 +79,7 @@ try {
     }
     if ($sel -lt 0 -or $sel -ge $paths.Count) { Fail 'Aucune image selectionnee / choix hors liste.' }
     $wim = $paths[$sel]
+    $cat = $items[$sel].Category      # 'Modele' | 'Edition'
     $ImgName = Split-Path $wim -Leaf
     Report 'demarrage' 'running' "Image $ImgName"
 
@@ -125,6 +127,18 @@ exit
     # Unattend (jonction + admin local + locale) -> traite au 1er boot
     New-Item -ItemType Directory -Force -Path W:\Windows\Panther | Out-Null
     Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force
+
+    # Outil de capture : depose UNIQUEMENT sur une install NUE (edition), dans un dossier
+    # RESERVE AUX ADMINISTRATEURS (jamais les eleves). Il sera ensuite embarque dans les
+    # captures (donc les modeles le transportent tout seuls). ACL par SID connus (langue-independant) :
+    # Administrateurs = S-1-5-32-544, SYSTEM = S-1-5-18. On coupe l'heritage -> pas d'acces "Utilisateurs".
+    if ($cat -eq 'Edition' -and (Test-Path $CaptureCmd)) {
+        $toolDir = 'W:\Ec19'
+        New-Item -ItemType Directory -Force -Path $toolDir | Out-Null
+        Copy-Item $CaptureCmd (Join-Path $toolDir 'Preparer-la-capture.cmd') -Force
+        icacls $toolDir /inheritance:r /grant "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
+        Write-Host "Outil de capture depose dans C:\Ec19 (admins uniquement)." -ForegroundColor Cyan
+    }
 
     # Pilotes : dossier du modele (nomme par SysID) sinon tous (match PnP)
     Report 'pilotes' 'running' $Model

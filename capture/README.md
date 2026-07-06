@@ -34,6 +34,19 @@ PXE, prête à être déployée sur les postes du même modèle.
 - Si `sysprep` échoue et que le poste ne s'éteint pas : cause la plus fréquente = une **application du
   Microsoft Store**. Voir `%WINDIR%\System32\Sysprep\Panther\setuperr.log`.
 
+## Où trouver `Préparer-la-capture.cmd` sur un poste
+
+- **Postes déployés par PXE (install nue)** : l'outil est déposé automatiquement dans
+  **`C:\Ec19\Preparer-la-capture.cmd`**, un dossier **réservé aux administrateurs** (les élèves
+  n'y ont aucun accès). Il est ensuite **embarqué dans les captures** → tout modèle capturé le
+  transporte tout seul.
+- **Anciens postes (non redéployés)** : copier le fichier `capture/Preparer-la-capture.cmd`
+  manuellement (clé USB / partage), dans un emplacement accessible à l'admin uniquement.
+
+> Pour que le dépôt automatique fonctionne, placer `Preparer-la-capture.cmd` **à la racine du
+> partage** (`\\stats\Deploy$\Preparer-la-capture.cmd`) — `deploy.ps1` le copie de là.
+> Note : `sysprep` exige de toute façon l'élévation administrateur ; un élève ne peut pas le lancer.
+
 ## Côté serveur (une seule fois, par l'admin)
 
 - La capture écrit dans `\\stats\Deploy$\images\`. Le compte **`svc.wds`** (utilisé par le WinPE) doit
