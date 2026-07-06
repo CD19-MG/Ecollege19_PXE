@@ -19,6 +19,17 @@ MDT étant en fin de vie, on automatise le déploiement **avec WDS seul** via de
 | **UnattendedJoin** | `ImageUnattend` (specialize) | Le **compte de jonction** au domaine `ecollege19.lan` (droit de joindre + créer l'objet). |
 | **AdministratorPassword** | `ImageUnattend` (oobeSystem) | Mot de passe de l'**Administrateur local intégré** (le compte est **activé** par la commande `Enable-LocalUser` en specialize, robuste à la langue via le SID `-500`). |
 
+## Configuration AD des comptes de service
+- **`svc.wds`** (Login WDS) : simple **utilisateur du domaine** (WDS laisse les clients authentifiés
+  lire les images). Mot de passe **sans expiration**, non modifiable ; interdire l'ouverture de
+  session interactive/RDP (GPO) — durcissement. Optionnel : ACL Lecture sur le groupe d'images WDS.
+- **`domain.join`** (UnattendedJoin) : **PAS admin du domaine**. Lui **déléguer** sur l'**OU cible**
+  (Déléguer le contrôle > tâche personnalisée > Objets Ordinateur) : **Créer** (et Supprimer) les
+  objets ordinateur + **Réinitialiser le mot de passe** + **écrire toutes les propriétés**. Portée =
+  cette OU seulement. La délégation **contourne le quota des 10 machines** (`ms-DS-MachineAccountQuota`).
+  Renseigner `MachineObjectOU` (dans `ImageUnattend.xml`) = cette OU. Réimage d'un poste connu : les
+  droits ci-dessus reprennent l'objet existant (sinon supprimer l'ancien objet).
+
 ## ⚠️ Secrets — jamais les vraies valeurs dans le dépôt
 Les 3 secrets sont laissés en `&lt;REMPLIR_HORS_DEPOT&gt;` → à renseigner dans les **copies locales**
 (sur le serveur, hors git). Le compte de jonction + le mot de passe admin sont en **clair** dans
