@@ -35,7 +35,12 @@ $models = @(
 
 if (-not (Get-Module -ListAvailable -Name HPCMSL)) {
     Write-Host "Installation du module HPCMSL..." -ForegroundColor Cyan
-    Install-Module -Name HPCMSL -Force -AcceptLicense -Scope AllUsers
+    # Fournisseur NuGet + depot PSGallery de confiance (evite les prompts).
+    try { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null } catch {}
+    try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue } catch {}
+    # -AcceptLicense n'existe que sur PowerShellGet >= 2.x : on le tente, sinon repli sans.
+    try   { Install-Module -Name HPCMSL -Force -Scope AllUsers -AcceptLicense -ErrorAction Stop }
+    catch { Install-Module -Name HPCMSL -Force -Scope AllUsers }
 }
 Import-Module HPCMSL
 New-Item -ItemType Directory -Force -Path $OutRoot | Out-Null
