@@ -12,11 +12,17 @@ MDT étant en fin de vie, on automatise le déploiement **avec WDS seul** via de
   `InstallTo` disque 0 / partition 3 (Windows) selon le schéma de partitions.
 - `ImageUnattend.xml` : `MachineObjectOU` (si OU cible), `ComputerName` (`*` = nommage auto).
 
+## Les TROIS identifiants (à ne pas confondre)
+| Identifiant | Fichier / phase | Rôle |
+|---|---|---|
+| **Login** | `WDSClientUnattend` (WinPE) | Compte pour que **WinPE se connecte à WDS** et télécharge l'image. Compte de domaine à **faible privilège** (accès lecture WDS) — ni admin, ni le compte de jonction. |
+| **UnattendedJoin** | `ImageUnattend` (specialize) | Le **compte de jonction** au domaine `ecollege19.lan` (droit de joindre + créer l'objet). |
+| **AdministratorPassword** | `ImageUnattend` (oobeSystem) | Mot de passe de l'**Administrateur local intégré** (le compte est **activé** par la commande `Enable-LocalUser` en specialize, robuste à la langue via le SID `-500`). |
+
 ## ⚠️ Secrets — jamais les vraies valeurs dans le dépôt
-Trois secrets, laissés en `&lt;REMPLIR_HORS_DEPOT&gt;` :
-- **accès WDS** (`WDSClientUnattend` > Login) ;
-- **compte de jonction** `ecollege19.lan` (`ImageUnattend` > UnattendedJoin) ;
-- **mot de passe admin local** (`ImageUnattend` > LocalAccount).
+Les 3 secrets sont laissés en `&lt;REMPLIR_HORS_DEPOT&gt;` → à renseigner dans les **copies locales**
+(sur le serveur, hors git). Le compte de jonction + le mot de passe admin sont en **clair** dans
+l'unattend → protéger le fichier (ACL) et compte de jonction à **moindre privilège**.
 → Renseigner dans une **copie locale gitignorée** (`*.local.xml`) déployée à la main, ou via un
 outil de secrets. Le mot de passe de jonction est en **clair** dans l'unattend → fichier à protéger
 (ACL sur RemoteInstall / partage) et compte de jonction **à moindre privilège** (droit de joindre + OU).
