@@ -100,22 +100,37 @@ function Show-MainMenu {
     }
 }
 
-function Show-ImagePicker($items) {
-    # $items = tableau d'objets avec .Label et .Category ('Modele'|'Edition'). Retourne l'index ou -1.
+function Show-ImagePicker($items, $recIndex = -1) {
+    # $items = tableau d'objets avec .Label et .Category ('Modele'|'Edition'). $recIndex = index
+    # recommande pour ce poste (modele detecte) ou -1. Retourne l'index choisi ou -1.
     if (-not $script:GuiOk) {
         Write-Host ''
-        for ($i=0; $i -lt $items.Count; $i++) { Write-Host ("  [{0}] {1} ({2})" -f $i, $items[$i].Label, $items[$i].Category) }
-        $sel = Read-Host 'Numero de l image a deployer'
+        for ($i=0; $i -lt $items.Count; $i++) {
+            $mark = if ($i -eq $recIndex) { '   <-- recommande pour ce poste' } else { '' }
+            Write-Host ("  [{0}] {1} ({2}){3}" -f $i, $items[$i].Label, $items[$i].Category, $mark)
+        }
+        $prompt = if ($recIndex -ge 0) { "Numero de l image a deployer [$recIndex]" } else { 'Numero de l image a deployer' }
+        $sel = Read-Host $prompt
+        if ([string]::IsNullOrWhiteSpace($sel) -and $recIndex -ge 0) { return $recIndex }
         if ($sel -match '^\d+$' -and [int]$sel -ge 0 -and [int]$sel -lt $items.Count) { return [int]$sel }
         return -1
     }
     try {
-        $f = New-Ec19Form 'Installer Windows - choix de l image' 620 520
+        $f = New-Ec19Form 'Installer Windows - choix de l image' 620 540
         Add-Header $f 'Choisissez l image a installer' | Out-Null
+        if ($recIndex -ge 0 -and $recIndex -lt $items.Count) {
+            $lblRec = New-Object System.Windows.Forms.Label
+            $lblRec.Text = 'Recommande pour ce poste : ' + $items[$recIndex].Label
+            $lblRec.Location = New-Object System.Drawing.Point(20, 62)
+            $lblRec.Size = New-Object System.Drawing.Size(560, 22)
+            $lblRec.ForeColor = [System.Drawing.Color]::FromArgb(21, 128, 61)
+            $lblRec.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+            $f.Controls.Add($lblRec)
+        }
 
         $lv = New-Object System.Windows.Forms.ListView
-        $lv.Location = New-Object System.Drawing.Point(20, 75)
-        $lv.Size = New-Object System.Drawing.Size(560, 300)
+        $lv.Location = New-Object System.Drawing.Point(20, 90)
+        $lv.Size = New-Object System.Drawing.Size(560, 285)
         $lv.View = 'Details'
         $lv.FullRowSelect = $true
         $lv.MultiSelect = $false
@@ -132,7 +147,10 @@ function Show-ImagePicker($items) {
             $it.Tag = $i
             $lv.Items.Add($it) | Out-Null
         }
-        if ($lv.Items.Count -gt 0) { $lv.Items[0].Selected = $true }
+        # Preselectionne l'image recommandee (modele detecte) si presente, sinon la premiere.
+        $toSel = 0
+        if ($recIndex -ge 0) { for ($k=0; $k -lt $lv.Items.Count; $k++) { if ([int]$lv.Items[$k].Tag -eq $recIndex) { $toSel = $k; break } } }
+        if ($lv.Items.Count -gt 0) { $lv.Items[$toSel].Selected = $true; $lv.Items[$toSel].EnsureVisible() }
         $f.Controls.Add($lv)
 
         $chk = New-Object System.Windows.Forms.CheckBox

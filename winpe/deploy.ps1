@@ -60,22 +60,38 @@ try {
     foreach ($e in $editions) { $paths += $e.FullName; $items += [pscustomobject]@{ Label=$e.Name; Category='Edition' } }
     if (-not $paths.Count) { Fail "Aucun .wim (ni images\modeles\ ni images\editions\ ni racine)." }
 
+    # Auto-recommandation : si une image MODELE correspond au modele detecte de ce poste, la proposer.
+    function NormName($s) { if ($s) { ($s -replace '[^\w]', '').ToLower() } else { '' } }
+    $modelNorm = NormName $Model
+    $recIndex = -1
+    if ($modelNorm.Length -ge 4) {
+        for ($i=0; $i -lt $models.Count; $i++) {   # les modeles sont en tete de $items
+            $n = NormName ([System.IO.Path]::GetFileNameWithoutExtension($models[$i].Name))
+            if ($n -and ($n.Contains($modelNorm) -or $modelNorm.Contains($n))) { $recIndex = $i; break }
+        }
+    }
+    if ($recIndex -ge 0) { Write-Host ("Modele detecte : {0} -> image recommandee : {1}" -f $Model, $items[$recIndex].Label) -ForegroundColor Green }
+
     # Choix via l'interface graphique si dispo (gui.ps1), sinon liste texte
     $usedGui = $false
     $gui = "$Share\gui.ps1"
     if (Test-Path $gui) { . $gui; $usedGui = (Test-Gui) }
     if ($usedGui) {
-        $sel = Show-ImagePicker $items
+        $sel = Show-ImagePicker $items $recIndex
         $usedGui = (Test-Gui)   # a pu retomber en texte si l'affichage a echoue
     } else {
         Write-Host ''
         for ($i=0; $i -lt $items.Count; $i++) {
             if ($i -eq 0 -and $models.Count)     { Write-Host 'Images par MODELE (recommande - a jour) :' -ForegroundColor Cyan }
             if ($i -eq $models.Count)            { Write-Host 'Installation complete (Windows nu) :'     -ForegroundColor DarkCyan }
-            Write-Host ("  [{0}] {1}" -f $i, $items[$i].Label)
+            $mark = if ($i -eq $recIndex) { '   <-- recommande pour ce poste' } else { '' }
+            Write-Host ("  [{0}] {1}{2}" -f $i, $items[$i].Label, $mark)
         }
-        $r = Read-Host 'Numero de l image a deployer'
-        $sel = if ($r -match '^\d+$') { [int]$r } else { -1 }
+        $rprompt = if ($recIndex -ge 0) { "Numero de l image a deployer [$recIndex]" } else { 'Numero de l image a deployer' }
+        $r = Read-Host $rprompt
+        if ([string]::IsNullOrWhiteSpace($r) -and $recIndex -ge 0) { $sel = $recIndex }
+        elseif ($r -match '^\d+$') { $sel = [int]$r }
+        else { $sel = -1 }
     }
     if ($sel -lt 0 -or $sel -ge $paths.Count) { Fail 'Aucune image selectionnee / choix hors liste.' }
     $wim = $paths[$sel]
