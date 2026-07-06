@@ -10,9 +10,10 @@
   (en lecture seule, la capture echouerait a l'ecriture du WIM). ASCII pur.
 #>
 $ErrorActionPreference = 'Stop'
-$Server = 'srv-pxe.ecollege19.lan'
-$Share  = "\\$Server\Deploy$"
-$ImgDir = "$Share\images"
+$Server   = 'srv-pxe.ecollege19.lan'
+$Share    = "\\$Server\Deploy$"
+$ImgDir    = "$Share\images"
+$ModelDir  = "$ImgDir\modeles"   # les captures vont ici -> categorie "par modele" au deploiement
 
 function Fail($m){
     Write-Host "`nERREUR: $m" -ForegroundColor Red
@@ -54,24 +55,38 @@ try {
     $def = $def.Trim('_')
     if ($sysId) { Write-Host "Modele detecte : $model (SysID $sysId)" -ForegroundColor Green }
 
-    $name = Read-Host "Nom de l'image [$def]"
-    if ([string]::IsNullOrWhiteSpace($name)) { $name = $def }
+    # Nom via l'interface graphique si dispo (gui.ps1 sur le partage), sinon invite texte
+    $gui = "$Share\gui.ps1"
+    $name = $null
+    if (Test-Path $gui) {
+        . $gui
+        if (Test-Gui) {
+            $lbl = if ($sysId) { "$model (SysID $sysId)" } else { $model }
+            $name = Show-CaptureDialog $def $lbl
+            if ($null -eq $name) { Fail 'Annule par l operateur.' }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        $name = Read-Host "Nom de l'image [$def]"
+        if ([string]::IsNullOrWhiteSpace($name)) { $name = $def }
+    }
     $name = (($name -replace '[^\w\-]', '_') -replace '_+', '_').Trim('_')
 
-    if (-not (Test-Path $ImgDir)) { New-Item -ItemType Directory -Force -Path $ImgDir | Out-Null }
-    $dest = "$ImgDir\$name.wim"
+    if (-not (Test-Path $ModelDir)) { New-Item -ItemType Directory -Force -Path $ModelDir | Out-Null }
+    $dest = "$ModelDir\$name.wim"
     if (Test-Path $dest) {
-        if ((Read-Host "$name.wim existe deja. Ecraser ? (tape OUI)") -ne 'OUI') { Fail 'Annule par l operateur.' }
+        Write-Host "Une image '$name' existe deja." -ForegroundColor Yellow
+        if ((Read-Host "La REMPLACER par la version a jour ? (tape OUI)") -ne 'OUI') { Fail 'Annule par l operateur.' }
         Remove-Item $dest -Force
     }
 
-    Write-Host "Capture de $win -> images\$name.wim (plusieurs minutes)..." -ForegroundColor Cyan
+    Write-Host "Capture de $win -> images\modeles\$name.wim (plusieurs minutes)..." -ForegroundColor Cyan
     dism /Capture-Image /ImageFile:"$dest" /CaptureDir:$win\ /Name:"$name" /Compress:max
     if ($LASTEXITCODE -ne 0) { Fail "dism /Capture-Image a echoue (code $LASTEXITCODE)." }
 
     Write-Host ''
-    Write-Host "OK - image disponible au deploiement : $name.wim" -ForegroundColor Green
-    Write-Host "Elle apparaitra dans la liste des editions au prochain demarrage PXE ([1] Installer)." -ForegroundColor Green
+    Write-Host "OK - image disponible au deploiement : modeles\$name.wim" -ForegroundColor Green
+    Write-Host "Elle apparaitra en tete de liste (categorie MODELE) au prochain PXE ([1] Installer)." -ForegroundColor Green
     try { Stop-Transcript | Out-Null } catch {}
     Read-Host 'Tape Entree pour redemarrer'
     wpeutil reboot

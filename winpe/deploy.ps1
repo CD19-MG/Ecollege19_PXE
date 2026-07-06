@@ -29,14 +29,36 @@ try {
     Write-Host "=== Deploiement eCollege19 (WinPE) ===" -ForegroundColor Cyan
     if (-not (Test-Path $ImgDir)) { Fail "Dossier $ImgDir injoignable." }
 
-    # Choix de l'edition = choix du fichier WIM (un WIM par edition : Pro, Pro Education...)
-    $wims = @(Get-ChildItem -Path $ImgDir -Filter *.wim | Sort-Object Name)
-    if (-not $wims) { Fail "Aucun .wim dans $ImgDir." }
-    Write-Host "`nEditions disponibles :" -ForegroundColor Cyan
-    for ($i=0; $i -lt $wims.Count; $i++) { Write-Host "  [$i] $($wims[$i].Name)" }
-    $sel = [int](Read-Host 'Numero de l edition a deployer')
-    if ($sel -lt 0 -or $sel -ge $wims.Count) { Fail "Choix hors liste." }
-    $wim = $wims[$sel].FullName
+    # Liste categorisee : images par MODELE (captures, a jour) d'abord, puis installations completes.
+    $modelDir = Join-Path $ImgDir 'modeles'
+    $edDir    = Join-Path $ImgDir 'editions'
+    $models   = @(Get-ChildItem -Path $modelDir -Filter *.wim -ErrorAction SilentlyContinue | Sort-Object Name)
+    $editions = @(Get-ChildItem -Path $edDir    -Filter *.wim -ErrorAction SilentlyContinue | Sort-Object Name)
+    $editions += @(Get-ChildItem -Path $ImgDir  -Filter *.wim -ErrorAction SilentlyContinue | Sort-Object Name)  # racine (compat)
+    $paths = @(); $items = @()
+    foreach ($m in $models)   { $paths += $m.FullName; $items += [pscustomobject]@{ Label=$m.Name; Category='Modele' } }
+    foreach ($e in $editions) { $paths += $e.FullName; $items += [pscustomobject]@{ Label=$e.Name; Category='Edition' } }
+    if (-not $paths.Count) { Fail "Aucun .wim (ni images\modeles\ ni images\editions\ ni racine)." }
+
+    # Choix via l'interface graphique si dispo (gui.ps1), sinon liste texte
+    $usedGui = $false
+    $gui = "$Share\gui.ps1"
+    if (Test-Path $gui) { . $gui; $usedGui = (Test-Gui) }
+    if ($usedGui) {
+        $sel = Show-ImagePicker $items
+        $usedGui = (Test-Gui)   # a pu retomber en texte si l'affichage a echoue
+    } else {
+        Write-Host ''
+        for ($i=0; $i -lt $items.Count; $i++) {
+            if ($i -eq 0 -and $models.Count)     { Write-Host 'Images par MODELE (recommande - a jour) :' -ForegroundColor Cyan }
+            if ($i -eq $models.Count)            { Write-Host 'Installation complete (Windows nu) :'     -ForegroundColor DarkCyan }
+            Write-Host ("  [{0}] {1}" -f $i, $items[$i].Label)
+        }
+        $r = Read-Host 'Numero de l image a deployer'
+        $sel = if ($r -match '^\d+$') { [int]$r } else { -1 }
+    }
+    if ($sel -lt 0 -or $sel -ge $paths.Count) { Fail 'Aucune image selectionnee / choix hors liste.' }
+    $wim = $paths[$sel]
 
     # Index : auto si le WIM ne contient qu'une image, sinon on demande
     $imgs = @(Get-WindowsImage -ImagePath $wim)
@@ -49,7 +71,10 @@ try {
         $index = [int](Read-Host 'Index a appliquer')
     }
 
-    if ((Read-Host "Taper OUI pour EFFACER le disque $Disk et reinstaller") -ne 'OUI') { Fail 'Annule par l operateur.' }
+    # En mode graphique, la case a cocher "Je confirme l effacement" a deja valide -> pas de re-saisie.
+    if (-not $usedGui) {
+        if ((Read-Host "Taper OUI pour EFFACER le disque $Disk et reinstaller") -ne 'OUI') { Fail 'Annule par l operateur.' }
+    }
 
     # Partition GPT / UEFI
     $dp = @"

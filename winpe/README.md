@@ -41,8 +41,9 @@ Dism /Unmount-Image /MountDir:C:\WinPE_amd64\mount /Commit
 2. Créer un **partage** `\\stats\Deploy$` pour `svc.wds` (**Lecture** partout, **Modifier sur `images\`**
    pour permettre la capture) contenant, **à la RACINE** (tous éditables sans rebuild) :
    - **`menu.ps1`** — menu au démarrage : `[1]` déployer / `[2]` capturer ;
+   - **`gui.ps1`** — interface graphique (WinForms, boutons) partagée par menu/deploy/capture ; repli texte auto si WinForms indisponible ;
    - **`deploy.ps1`** — déploiement (partition GPT, apply WIM, unattend, pilotes, bcdboot, reboot) ;
-   - **`capture.ps1`** — capture d'une image de référence → écrit dans `images\`, nom = modèle auto ;
+   - **`capture.ps1`** — capture d'une image de référence → écrit dans `images\modeles\`, nom = modèle auto ;
    - `images\` : les WIM déployables (éditions `Win11_Pro.wim`… **et** les images capturées par modèle) ;
    - `drivers\` : les packs HP en dossiers **par SysID** (`8AC9\`, `8591\`…), récursif ;
    - `unattend\ImageUnattend.xml` (jonction + admin local + locale — copie **remplie**, hors dépôt).
@@ -63,6 +64,7 @@ généralisé via `../capture/Preparer-la-capture.cmd` (sysprep). Détail : `../
 - `bootstrap.ps1` : modèle **figé dans le WinPE** — monte le partage (creds `svc.wds`, mot de passe **figé** pour l'imaging sans saisie) et lance `menu.ps1` du partage. `$Pass` = placeholder.
 - `bootstrap.local.ps1` : **copie gitignorée** de `bootstrap.ps1` avec le **vrai** mot de passe `svc.wds`. C'est ELLE qu'on injecte (renommée `bootstrap.ps1`) dans le WinPE. **Jamais commitée.**
 - `menu.ps1` : **à copier à la racine du partage** — menu déployer/capturer. Éditable sans rebuild.
+- `gui.ps1` : **à copier à la racine du partage** — interface graphique WinForms (boutons) + repli texte automatique. ASCII pur.
 - `deploy.ps1` : **à copier à la racine du partage** — le déploiement. Éditable sans rebuild. ASCII pur.
 - `capture.ps1` : **à copier à la racine du partage** — la capture d'image de référence. Éditable sans rebuild. ASCII pur.
 - `winpeshl.ini` : lance `wpeinit` puis `bootstrap.ps1`.
