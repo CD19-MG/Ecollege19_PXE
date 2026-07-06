@@ -24,8 +24,10 @@ foreach ($c in 'WinPE-WMI','WinPE-NetFX','WinPE-Scripting','WinPE-PowerShell','W
 
 # Injecter le BOOTSTRAP (stable) + le shell de lancement. deploy.ps1 n'est PAS fige dans le
 # WinPE : il vit sur le partage (voir plus bas) -> editable sans reconstruire le WinPE.
-Copy-Item .\bootstrap.ps1  C:\WinPE_amd64\mount\bootstrap.ps1 -Force
-Copy-Item .\winpeshl.ini   C:\WinPE_amd64\mount\Windows\System32\winpeshl.ini -Force
+# IMPORTANT : injecter bootstrap.LOCAL.ps1 (copie gitignoree ou l'on met le VRAI mot de passe
+# svc.wds), renommee en bootstrap.ps1 dans le WinPE. Ne jamais commiter bootstrap.local.ps1.
+Copy-Item .\bootstrap.local.ps1  C:\WinPE_amd64\mount\bootstrap.ps1 -Force
+Copy-Item .\winpeshl.ini         C:\WinPE_amd64\mount\Windows\System32\winpeshl.ini -Force
 
 # (option) pilotes reseau/stockage dans le WinPE si une carte n'est pas reconnue :
 # Dism /Add-Driver /Image:C:\WinPE_amd64\mount /Driver:<dossier_inf> /Recurse
@@ -51,6 +53,7 @@ Dism /Unmount-Image /MountDir:C:\WinPE_amd64\mount /Commit
 `Read-Host`** (l'écran reste, lisible) + **transcript** dans `\logs\`.
 
 ## Fichiers de ce dossier
-- `bootstrap.ps1` : **figé dans le WinPE** — monte le partage (creds `svc.wds`) et lance `deploy.ps1` du partage. Adapter `$Server`.
+- `bootstrap.ps1` : modèle **figé dans le WinPE** — monte le partage (creds `svc.wds`, mot de passe **figé** pour l'imaging sans saisie) et lance `deploy.ps1` du partage. `$Pass` = placeholder.
+- `bootstrap.local.ps1` : **copie gitignorée** de `bootstrap.ps1` avec le **vrai** mot de passe `svc.wds`. C'est ELLE qu'on injecte (renommée `bootstrap.ps1`) dans le WinPE. **Jamais commitée.**
 - `deploy.ps1` : **à copier à la racine du partage** — le déploiement. Éditable sans rebuild. ASCII pur.
 - `winpeshl.ini` : lance `wpeinit` puis `bootstrap.ps1`.

@@ -16,6 +16,8 @@ winpe/*.wim
 *.secret
 unattend.local.xml
 *.local.ini
+*.local.xml
+*.local.ps1
 
 
 # Divers
