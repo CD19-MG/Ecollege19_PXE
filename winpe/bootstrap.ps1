@@ -24,18 +24,32 @@ try {
     # une ligne "cmd /c net use ...". On tente d'abord New-SmbMapping (mot de passe passe en
     # parametre .NET, aucun parsing shell -> tous caracteres OK) ; repli sur net.exe appele
     # DIRECTEMENT par PowerShell (pas via cmd -> les metacaracteres ne sont pas interpretes).
+    #
+    # BOUCLE DE RETRY : juste apres wpeinit, le reseau/DNS n'est pas toujours pret (net use ->
+    # erreur 53 "chemin reseau introuvable"). On reessaie plusieurs fois en laissant le temps
+    # a DHCP/DNS de monter.
     $mounted = $false
-    try {
-        New-SmbMapping -RemotePath $Share -UserName $User -Password $Pass -ErrorAction Stop | Out-Null
-        $mounted = $true
-    } catch {
-        net use $Share /user:$User $Pass
-        $mounted = ($LASTEXITCODE -eq 0)
+    $maxTries = 8
+    for ($try = 1; $try -le $maxTries -and -not $mounted; $try++) {
+        if ($try -gt 1) {
+            Write-Host ("Reseau/partage pas encore pret (erreur 53 ?), tentative $try/$maxTries...") -ForegroundColor Yellow
+            Start-Sleep -Seconds 4
+        }
+        # nettoie un mapping partiel eventuel d'une tentative precedente
+        try { Remove-SmbMapping -RemotePath $Share -Force -ErrorAction SilentlyContinue | Out-Null } catch {}
+        try {
+            New-SmbMapping -RemotePath $Share -UserName $User -Password $Pass -ErrorAction Stop | Out-Null
+        } catch {
+            try { net use $Share /user:$User $Pass 2>$null | Out-Null } catch {}
+        }
+        # la verite = peut-on lire le partage ?
+        $mounted = (Test-Path "$Share\menu.ps1") -or (Test-Path "$Share\deploy.ps1")
     }
-    if (-not $mounted) { Write-Host "Montage du partage en echec (creds ? alias CNAME srv-pxe ? reseau ?)." -ForegroundColor Yellow }
+    if (-not $mounted) {
+        Fail "Partage $Share injoignable apres $maxTries tentatives (reseau/DNS srv-pxe ? carte reseau non reconnue ? creds ? alias CNAME non autorise en SMB ?)."
+    }
 
     # Lance le menu (deploiement / capture) s'il existe, sinon directement le deploiement.
     if     (Test-Path "$Share\menu.ps1")   { & "$Share\menu.ps1" }
-    elseif (Test-Path "$Share\deploy.ps1") { & "$Share\deploy.ps1" }
-    else { Fail "Ni menu.ps1 ni deploy.ps1 sur $Share (creds ? reseau ? alias CNAME srv-pxe non autorise en SMB ? carte reseau non reconnue ?)." }
+    else                                   { & "$Share\deploy.ps1" }
 } catch { Fail $_.Exception.Message }
