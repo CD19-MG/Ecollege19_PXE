@@ -161,20 +161,39 @@ try {
         $index = [int](Read-Host 'Index a appliquer')
     }
 
-    # Choix du college -> OU de jonction (si des OU sont configurees). '' = OU par defaut de l'unattend.
-    $ouDn = ''
+    # Choix college -> OU (ou mode MASTER sans jonction). Toujours propose (AUCUN + MASTER meme sans OU).
     $oarr = @(); if ($PxeCfg -and $PxeCfg.ous) { $oarr = @($PxeCfg.ous) }
-    if ($oarr.Count -gt 0) {
-        if (Get-Command Show-OuPicker -ErrorAction SilentlyContinue) {
-            $ouDn = Show-OuPicker $oarr
+    $ouChoice = ''
+    if (Get-Command Show-OuPicker -ErrorAction SilentlyContinue) {
+        $ouChoice = Show-OuPicker $oarr
+    } else {
+        Write-Host "`nDestination :" -ForegroundColor Cyan
+        Write-Host '  [0] AUCUN (OU par defaut)'
+        for ($i=0; $i -lt $oarr.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i+1), $oarr[$i].label) }
+        Write-Host ("  [{0}] Preparer un MASTER (NE PAS joindre le domaine)" -f ($oarr.Count+1))
+        $r = Read-Host 'Numero [0]'
+        if ($r -match '^\d+$' -and [int]$r -ge 1 -and [int]$r -le $oarr.Count) { $ouChoice = [string]$oarr[[int]$r-1].ou_dn }
+        elseif ($r -match '^\d+$' -and [int]$r -eq ($oarr.Count+1)) { $ouChoice = '__MASTER__' }
+    }
+    $masterMode = ($ouChoice -eq '__MASTER__')
+    $ouDn = if ($masterMode) { '' } else { $ouChoice }
+    if ($masterMode)  { Write-Host "Mode MASTER : le poste NE sera PAS joint au domaine (image de reference)." -ForegroundColor Magenta }
+    elseif ($ouDn)    { Write-Host "OU de jonction : $ouDn" -ForegroundColor Green }
+
+    # Nom de l'ordinateur : vide = nom automatique (renomme sur site a l'installation physique).
+    # Inutile en mode master (l'image sera generalisee par sysprep).
+    $pcName = ''
+    if (-not $masterMode) {
+        if (Get-Command Show-InputDialog -ErrorAction SilentlyContinue) {
+            $pcName = Show-InputDialog 'Nom du poste' "Nom de l'ordinateur (laisser VIDE = automatique, renomme sur site ; max 15 car.) :" ''
         } else {
-            Write-Host "`nCollege de destination (OU de jonction) :" -ForegroundColor Cyan
-            Write-Host '  [0] AUCUN (OU par defaut)'
-            for ($i=0; $i -lt $oarr.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i+1), $oarr[$i].label) }
-            $r = Read-Host 'Numero du college [0]'
-            if ($r -match '^\d+$' -and [int]$r -ge 1 -and [int]$r -le $oarr.Count) { $ouDn = [string]$oarr[[int]$r-1].ou_dn }
+            $pcName = Read-Host "Nom de l'ordinateur (vide = automatique)"
         }
-        if ($ouDn) { Write-Host "OU de jonction : $ouDn" -ForegroundColor Green }
+        if ($pcName) {
+            $pcName = ($pcName -replace '[^A-Za-z0-9\-]', '')
+            if ($pcName.Length -gt 15) { $pcName = $pcName.Substring(0, 15) }
+        }
+        if ($pcName) { Write-Host "Nom du poste : $pcName" -ForegroundColor Green } else { Write-Host "Nom : automatique (a renommer sur site)." -ForegroundColor DarkGray }
     }
 
     # En mode graphique, la case a cocher "Je confirme l effacement" a deja valide -> pas de re-saisie.
@@ -212,16 +231,24 @@ exit
     }
     if ($code -ne 0) { Fail "dism /Apply-Image a echoue (code $code)." }
 
-    # Unattend (jonction + admin local + locale) -> traite au 1er boot.
-    # Si un college a ete choisi, on injecte <MachineObjectOU> dans l'unattend (le poste rejoint
-    # directement la bonne OU). On retire d'abord toute OU active existante pour n'en avoir qu'une.
+    # Unattend (jonction + admin local + locale) -> traite au 1er boot. On personnalise :
+    #  - nom du poste (<ComputerName>) si fourni ; vide -> '*' (auto) conserve ;
+    #  - OU de jonction (<MachineObjectOU>) si un college a ete choisi ;
+    #  - mode MASTER : on RETIRE le composant UnattendedJoin -> le poste reste hors domaine.
     New-Item -ItemType Directory -Force -Path W:\Windows\Panther | Out-Null
-    if ($ouDn) {
+    if ($masterMode -or $ouDn -or $pcName) {
         $xmlua = Get-Content $Unattend -Raw
-        $xmlua = $xmlua -replace '(?m)^\s*<MachineObjectOU>.*?</MachineObjectOU>\s*\r?\n', ''
-        $xmlua = $xmlua -replace '</JoinDomain>', "</JoinDomain>`r`n        <MachineObjectOU>$ouDn</MachineObjectOU>"
+        if ($pcName) { $xmlua = $xmlua -replace '<ComputerName>.*?</ComputerName>', "<ComputerName>$pcName</ComputerName>" }
+        if ($masterMode) {
+            $xmlua = $xmlua -replace '(?s)\s*<component name="Microsoft-Windows-UnattendedJoin".*?</component>', ''
+        } elseif ($ouDn) {
+            $xmlua = $xmlua -replace '(?m)^\s*<MachineObjectOU>.*?</MachineObjectOU>\s*\r?\n', ''
+            $xmlua = $xmlua -replace '</JoinDomain>', "</JoinDomain>`r`n        <MachineObjectOU>$ouDn</MachineObjectOU>"
+        }
         [System.IO.File]::WriteAllText('W:\Windows\Panther\unattend.xml', $xmlua, (New-Object System.Text.UTF8Encoding($false)))
-        Write-Host "Unattend : jonction dans $ouDn" -ForegroundColor Cyan
+        $nom = if ($pcName) { $pcName } else { 'auto' }
+        $jonc = if ($masterMode) { 'MASTER (hors domaine)' } elseif ($ouDn) { "OU $ouDn" } else { 'OU par defaut' }
+        Write-Host "Unattend prepare (nom: $nom ; jonction: $jonc)." -ForegroundColor Cyan
     } else {
         Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force
     }

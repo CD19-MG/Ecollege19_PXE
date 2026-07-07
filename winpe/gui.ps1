@@ -266,30 +266,68 @@ function Show-ImagePicker($items, $recIndex = -1) {
     }
 }
 
+function Show-InputDialog($title, $label, $default) {
+    # Saisie texte simple. Retourne la valeur (ou le defaut si vide), ou $null si annule (GUI).
+    if (-not $script:GuiOk) {
+        $v = Read-Host ($label + $(if ($default) { " [$default]" } else { '' }))
+        if ([string]::IsNullOrWhiteSpace($v)) { return $default }
+        return $v
+    }
+    try {
+        $f = New-Ec19Form $title 520 250
+        Add-Header $f $title | Out-Null
+        $lbl = New-Object System.Windows.Forms.Label
+        $lbl.Text = $label
+        $lbl.Location = New-Object System.Drawing.Point(30, 72)
+        $lbl.Size = New-Object System.Drawing.Size(460, 45)
+        $f.Controls.Add($lbl)
+        $txt = New-Object System.Windows.Forms.TextBox
+        $txt.Text = $default
+        $txt.Location = New-Object System.Drawing.Point(30, 122)
+        $txt.Size = New-Object System.Drawing.Size(460, 30)
+        $txt.Font = New-Object System.Drawing.Font('Segoe UI', 12)
+        $f.Controls.Add($txt)
+        $ok = New-Object System.Windows.Forms.Button
+        $ok.Text = 'Valider'; $ok.Size = New-Object System.Drawing.Size(150, 40); $ok.Location = New-Object System.Drawing.Point(340, 168)
+        $ok.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215); $ok.ForeColor = [System.Drawing.Color]::White; $ok.FlatStyle = 'Flat'
+        $ok.Add_Click({ $f.Tag = $txt.Text; $f.Close() })
+        $f.Controls.Add($ok)
+        $f.Tag = $default
+        $f.ShowDialog() | Out-Null
+        return $f.Tag
+    } catch { $script:GuiOk = $false; return (Show-InputDialog $title $label $default) }
+}
+
 function Show-OuPicker($ous) {
-    # $ous = tableau d'objets {label, ou_dn}. Retourne le DN choisi, ou '' pour AUCUN (OU par defaut).
+    # $ous = tableau d'objets {label, ou_dn}. Retourne :
+    #   ''          -> AUCUN (jointe a l'OU par defaut, CN=Computers)
+    #   '<DN>'      -> jointe a cette OU
+    #   '__MASTER__'-> NE PAS joindre le domaine (preparation d'une image de reference)
     $arr = @($ous)
+    # Entrees : AUCUN, puis les colleges, puis MASTER (en dernier).
+    $entries = @()
+    $entries += @{ label = 'AUCUN (jointe a CN=Computers par defaut)'; value = '' }
+    foreach ($o in $arr) { $entries += @{ label = [string]$o.label; value = [string]$o.ou_dn } }
+    $entries += @{ label = 'Preparer un MASTER (NE PAS joindre le domaine)'; value = '__MASTER__' }
+
     if (-not $script:GuiOk) {
         Write-Host ''
-        Write-Host '  [0] AUCUN (OU par defaut)'
-        for ($i=0; $i -lt $arr.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i + 1), $arr[$i].label) }
-        $r = Read-Host 'Numero du college [0]'
-        if ($r -match '^\d+$' -and [int]$r -ge 1 -and [int]$r -le $arr.Count) { return [string]$arr[[int]$r - 1].ou_dn }
+        for ($i=0; $i -lt $entries.Count; $i++) { Write-Host ("  [{0}] {1}" -f $i, $entries[$i].label) }
+        $r = Read-Host 'Numero [0]'
+        if ($r -match '^\d+$' -and [int]$r -ge 0 -and [int]$r -lt $entries.Count) { return [string]$entries[[int]$r].value }
         return ''
     }
     try {
-        $f = New-Ec19Form 'College de destination (OU de jonction)' 560 480
-        Add-Header $f 'College de destination' | Out-Null
+        $f = New-Ec19Form 'Destination du poste (jonction domaine)' 560 480
+        Add-Header $f 'College / jonction' | Out-Null
         $lb = New-Object System.Windows.Forms.ListBox
         $lb.Location = New-Object System.Drawing.Point(20, 75)
         $lb.Size = New-Object System.Drawing.Size(510, 320)
         $lb.Font = New-Object System.Drawing.Font('Segoe UI', 11)
-        [void]$lb.Items.Add('AUCUN (OU par defaut)')
-        foreach ($o in $arr) { [void]$lb.Items.Add($o.label) }
+        foreach ($e in $entries) { [void]$lb.Items.Add($e.label) }
         $lb.SelectedIndex = 0
         $f.Controls.Add($lb)
 
-        # Rappel EN CLAIR du college selectionne (mis a jour a chaque changement).
         $lblSel = New-Object System.Windows.Forms.Label
         $lblSel.Location = New-Object System.Drawing.Point(20, 405)
         $lblSel.Size = New-Object System.Drawing.Size(350, 42)
@@ -311,8 +349,8 @@ function Show-OuPicker($ous) {
         $f.Tag = 0
         $f.ShowDialog() | Out-Null
         $idx = [int]$f.Tag
-        if ($idx -le 0) { return '' }
-        return [string]$arr[$idx - 1].ou_dn
+        if ($idx -lt 0 -or $idx -ge $entries.Count) { return '' }
+        return [string]$entries[$idx].value
     } catch {
         $script:GuiOk = $false
         return (Show-OuPicker $ous)
