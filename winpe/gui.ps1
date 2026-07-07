@@ -267,14 +267,16 @@ function Show-ImagePicker($items, $recIndex = -1) {
 }
 
 function Show-InputDialog($title, $label, $default) {
-    # Saisie texte simple. Retourne la valeur (ou le defaut si vide), ou $null si annule (GUI).
+    # Saisie texte simple. Retourne la valeur (ou le defaut si vide).
+    # Bouton "Retour" (ou taper 'retour' en mode texte) -> renvoie '__BACK__' (revenir a l'etape precedente).
     if (-not $script:GuiOk) {
         $v = Read-Host ($label + $(if ($default) { " [$default]" } else { '' }))
+        if ($v -eq 'retour') { return '__BACK__' }
         if ([string]::IsNullOrWhiteSpace($v)) { return $default }
         return $v
     }
     try {
-        $f = New-Ec19Form $title 520 250
+        $f = New-Ec19Form $title 520 260
         Add-Header $f $title | Out-Null
         $lbl = New-Object System.Windows.Forms.Label
         $lbl.Text = $label
@@ -288,11 +290,16 @@ function Show-InputDialog($title, $label, $default) {
         $txt.Font = New-Object System.Drawing.Font('Segoe UI', 12)
         $f.Controls.Add($txt)
         $ok = New-Object System.Windows.Forms.Button
-        $ok.Text = 'Valider'; $ok.Size = New-Object System.Drawing.Size(150, 40); $ok.Location = New-Object System.Drawing.Point(340, 168)
+        $ok.Text = 'Valider'; $ok.Size = New-Object System.Drawing.Size(150, 40); $ok.Location = New-Object System.Drawing.Point(340, 175)
         $ok.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215); $ok.ForeColor = [System.Drawing.Color]::White; $ok.FlatStyle = 'Flat'
         $ok.Add_Click({ $f.Tag = $txt.Text; $f.Close() })
         $f.Controls.Add($ok)
-        $f.Tag = $default
+        $back = New-Object System.Windows.Forms.Button
+        $back.Text = 'Retour'; $back.Size = New-Object System.Drawing.Size(120, 40); $back.Location = New-Object System.Drawing.Point(30, 175)
+        $back.FlatStyle = 'Flat'
+        $back.Add_Click({ $f.Tag = '__BACK__'; $f.Close() })
+        $f.Controls.Add($back)
+        $f.Tag = '__BACK__'   # croix (X) = revenir en arriere, ne valide PAS
         $f.ShowDialog() | Out-Null
         return $f.Tag
     } catch { $script:GuiOk = $false; return (Show-InputDialog $title $label $default) }
@@ -303,6 +310,8 @@ function Show-OuPicker($ous) {
     #   ''          -> AUCUN (jointe a l'OU par defaut, CN=Computers)
     #   '<DN>'      -> jointe a cette OU
     #   '__MASTER__'-> NE PAS joindre le domaine (preparation d'une image de reference)
+    #   '__BACK__'  -> revenir au choix de l'image
+    #   '__CANCEL__'-> annuler (retour menu)
     $arr = @($ous)
     # Entrees : AUCUN, puis les colleges, puis MASTER (en dernier).
     $entries = @()
@@ -313,24 +322,27 @@ function Show-OuPicker($ous) {
     if (-not $script:GuiOk) {
         Write-Host ''
         for ($i=0; $i -lt $entries.Count; $i++) { Write-Host ("  [{0}] {1}" -f $i, $entries[$i].label) }
+        Write-Host '  [r] Revenir au choix de l image     [a] Annuler (retour menu)'
         $r = Read-Host 'Numero [0]'
+        if ($r -match '^(r|R)$') { return '__BACK__' }
+        if ($r -match '^(a|A)$') { return '__CANCEL__' }
         if ($r -match '^\d+$' -and [int]$r -ge 0 -and [int]$r -lt $entries.Count) { return [string]$entries[[int]$r].value }
         return ''
     }
     try {
-        $f = New-Ec19Form 'Destination du poste (jonction domaine)' 560 480
+        $f = New-Ec19Form 'Destination du poste (jonction domaine)' 560 505
         Add-Header $f 'College / jonction' | Out-Null
         $lb = New-Object System.Windows.Forms.ListBox
         $lb.Location = New-Object System.Drawing.Point(20, 75)
-        $lb.Size = New-Object System.Drawing.Size(510, 320)
+        $lb.Size = New-Object System.Drawing.Size(510, 300)
         $lb.Font = New-Object System.Drawing.Font('Segoe UI', 11)
         foreach ($e in $entries) { [void]$lb.Items.Add($e.label) }
         $lb.SelectedIndex = 0
         $f.Controls.Add($lb)
 
         $lblSel = New-Object System.Windows.Forms.Label
-        $lblSel.Location = New-Object System.Drawing.Point(20, 405)
-        $lblSel.Size = New-Object System.Drawing.Size(350, 42)
+        $lblSel.Location = New-Object System.Drawing.Point(20, 382)
+        $lblSel.Size = New-Object System.Drawing.Size(510, 24)
         $lblSel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
         $lblSel.ForeColor = [System.Drawing.Color]::FromArgb(0, 90, 158)
         $f.Controls.Add($lblSel)
@@ -338,19 +350,40 @@ function Show-OuPicker($ous) {
         $lb.Add_SelectedIndexChanged($updOu)
         & $updOu
 
+        $btnBack = New-Object System.Windows.Forms.Button
+        $btnBack.Text = 'Retour'
+        $btnBack.Size = New-Object System.Drawing.Size(110, 42)
+        $btnBack.Location = New-Object System.Drawing.Point(20, 415)
+        $btnBack.FlatStyle = 'Flat'
+        $btnBack.Add_Click({ $f.Tag = '__BACK__'; $f.Close() })
+        $f.Controls.Add($btnBack)
+
+        $btnCancel = New-Object System.Windows.Forms.Button
+        $btnCancel.Text = 'Annuler'
+        $btnCancel.Size = New-Object System.Drawing.Size(110, 42)
+        $btnCancel.Location = New-Object System.Drawing.Point(140, 415)
+        $btnCancel.FlatStyle = 'Flat'
+        $btnCancel.Add_Click({ $f.Tag = '__CANCEL__'; $f.Close() })
+        $f.Controls.Add($btnCancel)
+
         $btn = New-Object System.Windows.Forms.Button
         $btn.Text = 'Valider'
         $btn.Size = New-Object System.Drawing.Size(150, 42)
-        $btn.Location = New-Object System.Drawing.Point(380, 405)
+        $btn.Location = New-Object System.Drawing.Point(380, 415)
         $btn.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
         $btn.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215); $btn.ForeColor = [System.Drawing.Color]::White; $btn.FlatStyle = 'Flat'
-        $btn.Add_Click({ $f.Tag = $lb.SelectedIndex; $f.Close() })
+        $btn.Add_Click({ $f.Tag = "IDX:$($lb.SelectedIndex)"; $f.Close() })
         $f.Controls.Add($btn)
-        $f.Tag = 0
+
+        $f.Tag = '__CANCEL__'   # croix (X) = annuler, ne valide PAS
         $f.ShowDialog() | Out-Null
-        $idx = [int]$f.Tag
-        if ($idx -lt 0 -or $idx -ge $entries.Count) { return '' }
-        return [string]$entries[$idx].value
+        $t = [string]$f.Tag
+        if ($t -eq '__BACK__' -or $t -eq '__CANCEL__') { return $t }
+        if ($t -like 'IDX:*') {
+            $idx = [int]($t.Substring(4))
+            if ($idx -ge 0 -and $idx -lt $entries.Count) { return [string]$entries[$idx].value }
+        }
+        return '__CANCEL__'
     } catch {
         $script:GuiOk = $false
         return (Show-OuPicker $ous)

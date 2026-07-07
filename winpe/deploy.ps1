@@ -124,91 +124,123 @@ try {
         Write-Host ("Modele detecte : {0} -> {1} images correspondent (peda/admin ?), choisis explicitement." -f $Model, $matches.Count) -ForegroundColor Yellow
     }
 
-    # Choix via l'interface graphique si dispo (gui.ps1), sinon liste texte
-    $usedGui = $false
+    # gui.ps1 charge une fois (interface graphique si dispo, sinon invites texte).
     $gui = "$Share\gui.ps1"
-    if (Test-Path $gui) { . $gui; $usedGui = (Test-Gui) }
-    if ($usedGui) {
-        $sel = Show-ImagePicker $items $recIndex
-        $usedGui = (Test-Gui)   # a pu retomber en texte si l'affichage a echoue
-    } else {
-        Write-Host ''
-        for ($i=0; $i -lt $items.Count; $i++) {
-            if ($i -eq 0 -and $models.Count)     { Write-Host 'Images par MODELE (recommande - a jour) :' -ForegroundColor Cyan }
-            if ($i -eq $models.Count)            { Write-Host 'Installation complete (Windows nu) :'     -ForegroundColor DarkCyan }
-            $mark = if ($i -eq $recIndex) { '   <-- recommande pour ce poste' } else { '' }
-            Write-Host ("  [{0}] {1}{2}" -f $i, $items[$i].Label, $mark)
-        }
-        $rprompt = if ($recIndex -ge 0) { "Numero de l image a deployer [$recIndex]" } else { 'Numero de l image a deployer' }
-        $r = Read-Host $rprompt
-        if ([string]::IsNullOrWhiteSpace($r) -and $recIndex -ge 0) { $sel = $recIndex }
-        elseif ($r -match '^\d+$') { $sel = [int]$r }
-        else { $sel = -1 }
-    }
-    if ($sel -lt 0 -or $sel -ge $paths.Count) { Fail 'Aucune image selectionnee / choix hors liste.' }
-    $wim = $paths[$sel]
-    $cat = $items[$sel].Category      # 'Modele' | 'Edition'
-    $ImgName = Split-Path $wim -Leaf
-    Report 'demarrage' 'running' "Image $ImgName"
+    $guiLoaded = $false
+    if (Test-Path $gui) { . $gui; $guiLoaded = (Test-Gui) }
 
-    # Index : auto si le WIM ne contient qu'une image, sinon on demande
-    $imgs = @(Get-WindowsImage -ImagePath $wim)
-    if ($imgs.Count -eq 1) {
-        $index = $imgs[0].ImageIndex
-        Write-Host "Image : $($imgs[0].ImageName) (index $index)" -ForegroundColor Green
-    } else {
-        Write-Host "`nPlusieurs images dans ce WIM :" -ForegroundColor Cyan
-        foreach ($im in $imgs) { Write-Host "  index $($im.ImageIndex) : $($im.ImageName)" }
-        $index = [int](Read-Host 'Index a appliquer')
-    }
-
-    # --- Config web (registre modeles + reglages), recuperee ICI : la pile HTTPS a chauffe
-    # pendant le choix de l'image -> le GET passe (contrairement a un appel des le demarrage).
-    $PxeCfg = Get-PxeConfig
-    if ($PxeCfg) {
-        Write-Host ("[config] recue : models=" + @($PxeCfg.models).Count + " ous=" + @($PxeCfg.ous).Count + " settings.disk=" + $PxeCfg.settings.disk) -ForegroundColor DarkCyan
-    } else {
-        Write-Host ("[config] AUCUNE config recue. Erreur : " + $script:CfgErr) -ForegroundColor Yellow
-        Write-Host ("[config] URL testee : " + $ConfigUrl) -ForegroundColor DarkGray
-    }
-    if ($PxeCfg -and $PxeCfg.settings) {
-        if ("$($PxeCfg.settings.disk)" -match '^\d+$') { $Disk = [int]$PxeCfg.settings.disk }
-        if ($PxeCfg.settings.unattend) { $Unattend = Join-Path "$Share\unattend" ([string]$PxeCfg.settings.unattend) }
-    }
-
-    # Choix college -> OU (ou mode MASTER sans jonction). Toujours propose (AUCUN + MASTER meme sans OU).
-    $oarr = @(); if ($PxeCfg -and $PxeCfg.ous) { $oarr = @($PxeCfg.ous) }
-    $ouChoice = ''
-    if (Get-Command Show-OuPicker -ErrorAction SilentlyContinue) {
-        $ouChoice = Show-OuPicker $oarr
-    } else {
-        Write-Host "`nDestination :" -ForegroundColor Cyan
-        Write-Host '  [0] AUCUN (OU par defaut)'
-        for ($i=0; $i -lt $oarr.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i+1), $oarr[$i].label) }
-        Write-Host ("  [{0}] Preparer un MASTER (NE PAS joindre le domaine)" -f ($oarr.Count+1))
-        $r = Read-Host 'Numero [0]'
-        if ($r -match '^\d+$' -and [int]$r -ge 1 -and [int]$r -le $oarr.Count) { $ouChoice = [string]$oarr[[int]$r-1].ou_dn }
-        elseif ($r -match '^\d+$' -and [int]$r -eq ($oarr.Count+1)) { $ouChoice = '__MASTER__' }
-    }
-    $masterMode = ($ouChoice -eq '__MASTER__')
-    $ouDn = if ($masterMode) { '' } else { $ouChoice }
-    if ($masterMode)  { Write-Host "Mode MASTER : le poste NE sera PAS joint au domaine (image de reference)." -ForegroundColor Magenta }
-    elseif ($ouDn)    { Write-Host "OU de jonction : $ouDn" -ForegroundColor Green }
-
-    # Nom de l'ordinateur : vide = nom automatique (renomme sur site a l'installation physique).
-    # Inutile en mode master (l'image sera generalisee par sysprep).
-    $pcName = ''
-    if (-not $masterMode) {
-        if (Get-Command Show-InputDialog -ErrorAction SilentlyContinue) {
-            $pcName = Show-InputDialog 'Nom du poste' "Nom de l'ordinateur (laisser VIDE = automatique, renomme sur site ; max 15 car.) :" ''
+    # Boucle de navigation : image -> (index/config) -> OU -> Nom.
+    # Depuis l'ecran OU/Nom on peut REVENIR (Retour) a l'etape precedente, ou ANNULER
+    # (retour menu AVEC remontee de statut) -> plus besoin d'eteindre le poste pour sortir.
+    $usedGui = $guiLoaded
+    $masterMode = $false; $ouDn = ''; $pcName = ''
+    $deployReady = $false
+    while (-not $deployReady) {
+        # --- Choix de l'image ---
+        $usedGui = $guiLoaded
+        if ($usedGui) {
+            $sel = Show-ImagePicker $items $recIndex
+            $usedGui = (Test-Gui)   # a pu retomber en texte si l'affichage a echoue
         } else {
-            $pcName = Read-Host "Nom de l'ordinateur (vide = automatique)"
+            Write-Host ''
+            for ($i=0; $i -lt $items.Count; $i++) {
+                if ($i -eq 0 -and $models.Count)     { Write-Host 'Images par MODELE (recommande - a jour) :' -ForegroundColor Cyan }
+                if ($i -eq $models.Count)            { Write-Host 'Installation complete (Windows nu) :'     -ForegroundColor DarkCyan }
+                $mark = if ($i -eq $recIndex) { '   <-- recommande pour ce poste' } else { '' }
+                Write-Host ("  [{0}] {1}{2}" -f $i, $items[$i].Label, $mark)
+            }
+            $rprompt = if ($recIndex -ge 0) { "Numero de l image a deployer [$recIndex]" } else { 'Numero de l image a deployer' }
+            $r = Read-Host $rprompt
+            if ([string]::IsNullOrWhiteSpace($r) -and $recIndex -ge 0) { $sel = $recIndex }
+            elseif ($r -match '^\d+$') { $sel = [int]$r }
+            else { $sel = -1 }
         }
-        if ($pcName) {
-            $pcName = ($pcName -replace '[^A-Za-z0-9\-]', '')
-            if ($pcName.Length -gt 15) { $pcName = $pcName.Substring(0, 15) }
+        if ($sel -lt 0 -or $sel -ge $paths.Count) { Fail 'Aucune image selectionnee / choix hors liste.' }
+        $wim = $paths[$sel]
+        $cat = $items[$sel].Category      # 'Modele' | 'Edition'
+        $ImgName = Split-Path $wim -Leaf
+        Report 'demarrage' 'running' "Image $ImgName"
+
+        # --- Index : auto si le WIM ne contient qu'une image, sinon on demande ---
+        $imgs = @(Get-WindowsImage -ImagePath $wim)
+        if ($imgs.Count -eq 1) {
+            $index = $imgs[0].ImageIndex
+            Write-Host "Image : $($imgs[0].ImageName) (index $index)" -ForegroundColor Green
+        } else {
+            Write-Host "`nPlusieurs images dans ce WIM :" -ForegroundColor Cyan
+            foreach ($im in $imgs) { Write-Host "  index $($im.ImageIndex) : $($im.ImageName)" }
+            $index = [int](Read-Host 'Index a appliquer')
         }
-        if ($pcName) { Write-Host "Nom du poste : $pcName" -ForegroundColor Green } else { Write-Host "Nom : automatique (a renommer sur site)." -ForegroundColor DarkGray }
+
+        # --- Config web (registre modeles + reglages), recuperee ICI : la pile HTTPS a chauffe
+        # pendant le choix de l'image -> le GET passe (contrairement a un appel des le demarrage).
+        $PxeCfg = Get-PxeConfig
+        if ($PxeCfg) {
+            Write-Host ("[config] recue : models=" + @($PxeCfg.models).Count + " ous=" + @($PxeCfg.ous).Count + " settings.disk=" + $PxeCfg.settings.disk) -ForegroundColor DarkCyan
+        } else {
+            Write-Host ("[config] AUCUNE config recue. Erreur : " + $script:CfgErr) -ForegroundColor Yellow
+            Write-Host ("[config] URL testee : " + $ConfigUrl) -ForegroundColor DarkGray
+        }
+        if ($PxeCfg -and $PxeCfg.settings) {
+            if ("$($PxeCfg.settings.disk)" -match '^\d+$') { $Disk = [int]$PxeCfg.settings.disk }
+            if ($PxeCfg.settings.unattend) { $Unattend = Join-Path "$Share\unattend" ([string]$PxeCfg.settings.unattend) }
+        }
+        $oarr = @(); if ($PxeCfg -and $PxeCfg.ous) { $oarr = @($PxeCfg.ous) }
+
+        # --- OU / Nom : sous-navigation (Retour = re-choix image ; Annuler = retour menu) ---
+        $goBackToImage = $false
+        $masterMode = $false; $ouDn = ''; $pcName = ''
+        $stage = 'ou'
+        while ($true) {
+            if ($stage -eq 'ou') {
+                # Choix college -> OU (ou MASTER sans jonction). Toujours propose (AUCUN + MASTER meme sans OU).
+                if (Get-Command Show-OuPicker -ErrorAction SilentlyContinue) {
+                    $ouChoice = Show-OuPicker $oarr
+                } else {
+                    Write-Host "`nDestination :" -ForegroundColor Cyan
+                    Write-Host '  [0] AUCUN (OU par defaut)'
+                    for ($i=0; $i -lt $oarr.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i+1), $oarr[$i].label) }
+                    Write-Host ("  [{0}] Preparer un MASTER (NE PAS joindre le domaine)" -f ($oarr.Count+1))
+                    Write-Host '  [r] Revenir au choix de l image     [a] Annuler (retour menu)'
+                    $r = Read-Host 'Numero [0]'
+                    if     ($r -match '^(r|R)$') { $ouChoice = '__BACK__' }
+                    elseif ($r -match '^(a|A)$') { $ouChoice = '__CANCEL__' }
+                    elseif ($r -match '^\d+$' -and [int]$r -ge 1 -and [int]$r -le $oarr.Count) { $ouChoice = [string]$oarr[[int]$r-1].ou_dn }
+                    elseif ($r -match '^\d+$' -and [int]$r -eq ($oarr.Count+1)) { $ouChoice = '__MASTER__' }
+                    else { $ouChoice = '' }
+                }
+                if ($ouChoice -eq '__CANCEL__') {
+                    Report 'annule' 'error' 'Annule par l operateur (retour menu)'
+                    Write-Host 'Annulation -> retour au menu.' -ForegroundColor Yellow
+                    try { Stop-Transcript | Out-Null } catch {}
+                    throw 'EC19_HANDLED'
+                }
+                if ($ouChoice -eq '__BACK__') { $goBackToImage = $true; break }
+                $masterMode = ($ouChoice -eq '__MASTER__')
+                $ouDn = if ($masterMode) { '' } else { $ouChoice }
+                if ($masterMode)  { Write-Host "Mode MASTER : le poste NE sera PAS joint au domaine (image de reference)." -ForegroundColor Magenta }
+                elseif ($ouDn)    { Write-Host "OU de jonction : $ouDn" -ForegroundColor Green }
+                if ($masterMode) { $pcName = ''; break }   # pas de nom en mode master
+                $stage = 'name'; continue
+            }
+            if ($stage -eq 'name') {
+                # Nom du poste : vide = automatique (renomme sur site). Retour -> revient a l'OU.
+                if (Get-Command Show-InputDialog -ErrorAction SilentlyContinue) {
+                    $pcName = Show-InputDialog 'Nom du poste' "Nom de l'ordinateur (laisser VIDE = automatique, renomme sur site ; max 15 car.).  Retour = revenir a la destination." ''
+                } else {
+                    $pcName = Read-Host "Nom de l'ordinateur (vide = automatique ; 'retour' = revenir a la destination)"
+                }
+                if ($pcName -eq '__BACK__') { $stage = 'ou'; continue }
+                if ($pcName) {
+                    $pcName = ($pcName -replace '[^A-Za-z0-9\-]', '')
+                    if ($pcName.Length -gt 15) { $pcName = $pcName.Substring(0, 15) }
+                }
+                if ($pcName) { Write-Host "Nom du poste : $pcName" -ForegroundColor Green } else { Write-Host "Nom : automatique (a renommer sur site)." -ForegroundColor DarkGray }
+                break
+            }
+        }
+        if ($goBackToImage) { continue }
+        $deployReady = $true
     }
 
     # En mode graphique, la case a cocher "Je confirme l effacement" a deja valide -> pas de re-saisie.
