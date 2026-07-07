@@ -107,8 +107,17 @@ try {
     $def = ($def -replace '[^\w\-]', '_') -replace '_+', '_'
     $def = $def.Trim('_')
     if ($sysId) { Write-Host "Modele detecte : $model (SysID $sysId)" -ForegroundColor Green }
-    if ($label) { Write-Host "Modele reconnu dans le registre : $label -> nom propose" -ForegroundColor Green }
-    else { Write-Host "Modele non declare dans le registre (nom propose = code brut). Astuce : declare-le dans Modeles & config pour un nom parlant." -ForegroundColor DarkGray }
+    if ($label) {
+        Write-Host "Modele reconnu dans le registre : $label -> nom propose" -ForegroundColor Green
+    } else {
+        $mt = if ($model.Length -ge 4) { $model.Substring(0,4) } else { '' }
+        Write-Host "Modele NON reconnu dans le registre -> le nom propose sera le code brut." -ForegroundColor Yellow
+        Write-Host "Pour un nom parlant, declare-le dans le dashboard (Modeles & config) avec l'une de ces valeurs :" -ForegroundColor Yellow
+        Write-Host ("   - SysID        = $sysId") -ForegroundColor Yellow
+        if ($mt) { Write-Host ("   - Machine type = $mt") -ForegroundColor Yellow }
+        Write-Host ("   - Modele       = $model") -ForegroundColor Yellow
+        Write-Host "(puis relance la capture ; le libelle deviendra le nom propose)" -ForegroundColor DarkGray
+    }
 
     # Nom via l'interface graphique si dispo (gui.ps1 sur le partage), sinon invite texte
     $gui = "$Share\gui.ps1"
