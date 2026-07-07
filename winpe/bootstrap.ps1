@@ -16,7 +16,20 @@ function Fail($m){ Write-Host "`nERREUR (bootstrap): $m" -ForegroundColor Red; R
 
 try {
     Write-Host "Connexion a $Share (utilisateur $User)" -ForegroundColor Cyan
-    cmd /c "net use $Share /user:$User $Pass"
+    # Montage SANS cmd : le mot de passe peut contenir & | < > ^ ( ) etc. qui casseraient
+    # une ligne "cmd /c net use ...". On tente d'abord New-SmbMapping (mot de passe passe en
+    # parametre .NET, aucun parsing shell -> tous caracteres OK) ; repli sur net.exe appele
+    # DIRECTEMENT par PowerShell (pas via cmd -> les metacaracteres ne sont pas interpretes).
+    $mounted = $false
+    try {
+        New-SmbMapping -RemotePath $Share -UserName $User -Password $Pass -ErrorAction Stop | Out-Null
+        $mounted = $true
+    } catch {
+        net use $Share /user:$User $Pass
+        $mounted = ($LASTEXITCODE -eq 0)
+    }
+    if (-not $mounted) { Write-Host "Montage du partage en echec (creds ? alias CNAME srv-pxe ? reseau ?)." -ForegroundColor Yellow }
+
     # Lance le menu (deploiement / capture) s'il existe, sinon directement le deploiement.
     if     (Test-Path "$Share\menu.ps1")   { & "$Share\menu.ps1" }
     elseif (Test-Path "$Share\deploy.ps1") { & "$Share\deploy.ps1" }
