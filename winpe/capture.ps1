@@ -33,12 +33,13 @@ function Report($phase, $status, $msg) {
     } catch { }
 }
 
+# Erreur recuperable : affichage + pause puis RETOUR AU MENU (throw sentinelle) au lieu de rebooter.
 function Fail($m){
     Report 'erreur' 'error' $m
     Write-Host "`nERREUR: $m" -ForegroundColor Red
     try { Stop-Transcript | Out-Null } catch {}
-    Read-Host 'Note l erreur ci-dessus, puis tape Entree pour redemarrer'
-    wpeutil reboot
+    Read-Host 'Note l erreur ci-dessus, puis tape Entree pour revenir au menu'
+    throw 'EC19_HANDLED'
 }
 
 try {
@@ -109,8 +110,9 @@ try {
     Write-Host ''
     Write-Host "OK - image disponible au deploiement : modeles\$name.wim" -ForegroundColor Green
     Write-Host "Elle apparaitra en tete de liste (categorie MODELE) au prochain PXE ([1] Installer)." -ForegroundColor Green
+    Write-Host "NE PAS demarrer ce poste sur son disque (il est generalise) : eteins-le depuis le menu." -ForegroundColor Yellow
     try { Stop-Transcript | Out-Null } catch {}
-    Read-Host 'Tape Entree pour redemarrer'
-    wpeutil reboot
+    Read-Host 'Tape Entree pour revenir au menu'
+    # Pas de reboot : la reference est generalisee (sysprep). Retour au menu -> Eteindre / autre.
 }
-catch { Fail $_.Exception.Message }
+catch { if ("$($_.Exception.Message)" -ne 'EC19_HANDLED') { Fail $_.Exception.Message } }

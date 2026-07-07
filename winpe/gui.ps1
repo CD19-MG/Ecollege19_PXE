@@ -53,18 +53,19 @@ function Show-MainMenu {
         Write-Host ''
         Write-Host '  [1] Installer Windows sur ce poste'
         Write-Host '  [2] Capturer une image de reference'
+        Write-Host '  [3] Redemarrer le poste'
+        Write-Host '  [4] Eteindre le poste'
         $c = Read-Host 'Votre choix [1]'
         if ([string]::IsNullOrWhiteSpace($c)) { $c = '1' }
-        if ($c.Trim() -eq '2') { return 'capture' } else { return 'deploy' }
+        switch ($c.Trim()) { '2' { return 'capture' } '3' { return 'reboot' } '4' { return 'shutdown' } default { return 'deploy' } }
     }
     try {
-        $f = New-Ec19Form 'Deploiement eCollege19 - Atelier MARBOT' 560 380
-        Add-Header $f 'Que voulez-vous faire ?' | Out-Null
+        $f = New-Ec19Form 'Deploiement eCollege19 - Atelier MARBOT' 560 430
 
         $btnDeploy = New-Object System.Windows.Forms.Button
         $btnDeploy.Text = "Installer Windows`nsur ce poste"
-        $btnDeploy.Size = New-Object System.Drawing.Size(240, 130)
-        $btnDeploy.Location = New-Object System.Drawing.Point(30, 100)
+        $btnDeploy.Size = New-Object System.Drawing.Size(240, 120)
+        $btnDeploy.Location = New-Object System.Drawing.Point(30, 90)
         $btnDeploy.Font = New-Object System.Drawing.Font('Segoe UI', 13, [System.Drawing.FontStyle]::Bold)
         $btnDeploy.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
         $btnDeploy.ForeColor = [System.Drawing.Color]::White
@@ -74,17 +75,35 @@ function Show-MainMenu {
 
         $btnCapture = New-Object System.Windows.Forms.Button
         $btnCapture.Text = "Capturer une image`nde reference (avance)"
-        $btnCapture.Size = New-Object System.Drawing.Size(240, 130)
-        $btnCapture.Location = New-Object System.Drawing.Point(290, 100)
+        $btnCapture.Size = New-Object System.Drawing.Size(240, 120)
+        $btnCapture.Location = New-Object System.Drawing.Point(290, 90)
         $btnCapture.Font = New-Object System.Drawing.Font('Segoe UI', 13)
         $btnCapture.BackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
         $btnCapture.FlatStyle = 'Flat'
         $btnCapture.Add_Click({ $f.Tag = 'capture'; $f.Close() })
         $f.Controls.Add($btnCapture)
 
+        $btnReboot = New-Object System.Windows.Forms.Button
+        $btnReboot.Text = "Redemarrer"
+        $btnReboot.Size = New-Object System.Drawing.Size(240, 42)
+        $btnReboot.Location = New-Object System.Drawing.Point(30, 225)
+        $btnReboot.FlatStyle = 'Flat'
+        $btnReboot.Add_Click({ $f.Tag = 'reboot'; $f.Close() })
+        $f.Controls.Add($btnReboot)
+
+        $btnShutdown = New-Object System.Windows.Forms.Button
+        $btnShutdown.Text = "Eteindre"
+        $btnShutdown.Size = New-Object System.Drawing.Size(240, 42)
+        $btnShutdown.Location = New-Object System.Drawing.Point(290, 225)
+        $btnShutdown.FlatStyle = 'Flat'
+        $btnShutdown.Add_Click({ $f.Tag = 'shutdown'; $f.Close() })
+        $f.Controls.Add($btnShutdown)
+
+        Add-Header $f 'Que voulez-vous faire ?' | Out-Null
+
         $lblFoot = New-Object System.Windows.Forms.Label
-        $lblFoot.Text = 'Installer = mettre Windows sur ce poste.  Capturer = creer une image modele (a faire apres sysprep).'
-        $lblFoot.Location = New-Object System.Drawing.Point(30, 250)
+        $lblFoot.Text = 'Installer = mettre Windows sur ce poste.  Capturer = creer une image modele (apres sysprep).'
+        $lblFoot.Location = New-Object System.Drawing.Point(30, 290)
         $lblFoot.Size = New-Object System.Drawing.Size(500, 60)
         $lblFoot.ForeColor = [System.Drawing.Color]::Gray
         $lblFoot.Font = New-Object System.Drawing.Font('Segoe UI', 9)

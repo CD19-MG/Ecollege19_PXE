@@ -66,12 +66,14 @@ function Resolve-DriverFolder($cfg) {
     return $null
 }
 
+# Erreur recuperable : on affiche, on met en pause, puis on REVIENT AU MENU (throw sentinelle
+# rattrapee par menu.ps1) au lieu de redemarrer le poste.
 function Fail($m){
     Report 'erreur' 'error' $m
     Write-Host "`nERREUR: $m" -ForegroundColor Red
     try { Stop-Transcript | Out-Null } catch {}
-    Read-Host 'Note l erreur ci-dessus, puis tape Entree pour redemarrer'
-    wpeutil reboot
+    Read-Host 'Note l erreur ci-dessus, puis tape Entree pour revenir au menu'
+    throw 'EC19_HANDLED'
 }
 
 try {
@@ -241,4 +243,4 @@ exit
     Start-Sleep 3
     wpeutil reboot
 }
-catch { Fail $_.Exception.Message }
+catch { if ("$($_.Exception.Message)" -ne 'EC19_HANDLED') { Fail $_.Exception.Message } }
