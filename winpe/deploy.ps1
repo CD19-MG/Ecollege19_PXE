@@ -35,9 +35,11 @@ function Report($phase, $status, $msg) {
 }
 
 # Config depuis la page web (modeles + reglages). Repli silencieux si injoignable.
+$script:CfgErr = ''
 function Get-PxeConfig {
-    if (-not $ReportToken -or $ReportToken -like '*JETON*') { return $null }
-    try { return Invoke-RestMethod -Uri $ConfigUrl -Method Get -Headers @{ 'X-PXE-Token'=$ReportToken } -TimeoutSec 8 } catch { return $null }
+    if (-not $ReportToken -or $ReportToken -like '*JETON*') { $script:CfgErr = 'jeton $ReportToken non renseigne (placeholder)'; return $null }
+    try { return Invoke-RestMethod -Uri $ConfigUrl -Method Get -Headers @{ 'X-PXE-Token'=$ReportToken } -TimeoutSec 8 }
+    catch { $script:CfgErr = $_.Exception.Message; return $null }
 }
 
 # Resout le dossier de pilotes via les regles du registre web (agnostique marque). $null si aucune.
@@ -89,7 +91,8 @@ try {
     if ($PxeCfg) {
         Write-Host ("[config] recue : models=" + @($PxeCfg.models).Count + " ous=" + @($PxeCfg.ous).Count + " settings.disk=" + $PxeCfg.settings.disk) -ForegroundColor DarkCyan
     } else {
-        Write-Host "[config] AUCUNE config recue du serveur (jeton `$ReportToken ? URL `$ConfigUrl ? reseau/cert ?)." -ForegroundColor Yellow
+        Write-Host ("[config] AUCUNE config recue. Erreur : " + $script:CfgErr) -ForegroundColor Yellow
+        Write-Host ("[config] URL testee : " + $ConfigUrl) -ForegroundColor DarkGray
     }
     if ($PxeCfg -and $PxeCfg.settings) {
         if ("$($PxeCfg.settings.disk)" -match '^\d+$') { $Disk = [int]$PxeCfg.settings.disk }
