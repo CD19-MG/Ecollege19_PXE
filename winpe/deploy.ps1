@@ -86,6 +86,11 @@ try {
 
     # Config depuis la page web (registre modeles + reglages). Repli sur les valeurs par defaut.
     $PxeCfg = Get-PxeConfig
+    if ($PxeCfg) {
+        Write-Host ("[config] recue : models=" + @($PxeCfg.models).Count + " ous=" + @($PxeCfg.ous).Count + " settings.disk=" + $PxeCfg.settings.disk) -ForegroundColor DarkCyan
+    } else {
+        Write-Host "[config] AUCUNE config recue du serveur (jeton `$ReportToken ? URL `$ConfigUrl ? reseau/cert ?)." -ForegroundColor Yellow
+    }
     if ($PxeCfg -and $PxeCfg.settings) {
         if ("$($PxeCfg.settings.disk)" -match '^\d+$') { $Disk = [int]$PxeCfg.settings.disk }
         if ($PxeCfg.settings.unattend) { $Unattend = Join-Path "$Share\unattend" ([string]$PxeCfg.settings.unattend) }
