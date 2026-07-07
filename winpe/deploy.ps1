@@ -161,6 +161,22 @@ try {
         $index = [int](Read-Host 'Index a appliquer')
     }
 
+    # Choix du college -> OU de jonction (si des OU sont configurees). '' = OU par defaut de l'unattend.
+    $ouDn = ''
+    $oarr = @(); if ($PxeCfg -and $PxeCfg.ous) { $oarr = @($PxeCfg.ous) }
+    if ($oarr.Count -gt 0) {
+        if (Get-Command Show-OuPicker -ErrorAction SilentlyContinue) {
+            $ouDn = Show-OuPicker $oarr
+        } else {
+            Write-Host "`nCollege de destination (OU de jonction) :" -ForegroundColor Cyan
+            Write-Host '  [0] AUCUN (OU par defaut)'
+            for ($i=0; $i -lt $oarr.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i+1), $oarr[$i].label) }
+            $r = Read-Host 'Numero du college [0]'
+            if ($r -match '^\d+$' -and [int]$r -ge 1 -and [int]$r -le $oarr.Count) { $ouDn = [string]$oarr[[int]$r-1].ou_dn }
+        }
+        if ($ouDn) { Write-Host "OU de jonction : $ouDn" -ForegroundColor Green }
+    }
+
     # En mode graphique, la case a cocher "Je confirme l effacement" a deja valide -> pas de re-saisie.
     if (-not $usedGui) {
         if ((Read-Host "Taper OUI pour EFFACER le disque $Disk et reinstaller") -ne 'OUI') { Fail 'Annule par l operateur.' }
@@ -191,9 +207,19 @@ exit
     dism /Apply-Image /ImageFile:"$wim" /Index:$index /ApplyDir:W:\
     if ($LASTEXITCODE -ne 0) { Fail "dism /Apply-Image a echoue (code $LASTEXITCODE)." }
 
-    # Unattend (jonction + admin local + locale) -> traite au 1er boot
+    # Unattend (jonction + admin local + locale) -> traite au 1er boot.
+    # Si un college a ete choisi, on injecte <MachineObjectOU> dans l'unattend (le poste rejoint
+    # directement la bonne OU). On retire d'abord toute OU active existante pour n'en avoir qu'une.
     New-Item -ItemType Directory -Force -Path W:\Windows\Panther | Out-Null
-    Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force
+    if ($ouDn) {
+        $xmlua = Get-Content $Unattend -Raw
+        $xmlua = $xmlua -replace '(?m)^\s*<MachineObjectOU>.*?</MachineObjectOU>\s*\r?\n', ''
+        $xmlua = $xmlua -replace '</JoinDomain>', "</JoinDomain>`r`n        <MachineObjectOU>$ouDn</MachineObjectOU>"
+        [System.IO.File]::WriteAllText('W:\Windows\Panther\unattend.xml', $xmlua, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "Unattend : jonction dans $ouDn" -ForegroundColor Cyan
+    } else {
+        Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force
+    }
 
     # Outil de capture : depose UNIQUEMENT sur une install NUE (edition), dans un dossier
     # RESERVE AUX ADMINISTRATEURS (jamais les eleves). Il sera ensuite embarque dans les

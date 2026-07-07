@@ -213,6 +213,47 @@ function Show-ImagePicker($items, $recIndex = -1) {
     }
 }
 
+function Show-OuPicker($ous) {
+    # $ous = tableau d'objets {label, ou_dn}. Retourne le DN choisi, ou '' pour AUCUN (OU par defaut).
+    $arr = @($ous)
+    if (-not $script:GuiOk) {
+        Write-Host ''
+        Write-Host '  [0] AUCUN (OU par defaut)'
+        for ($i=0; $i -lt $arr.Count; $i++) { Write-Host ("  [{0}] {1}" -f ($i + 1), $arr[$i].label) }
+        $r = Read-Host 'Numero du college [0]'
+        if ($r -match '^\d+$' -and [int]$r -ge 1 -and [int]$r -le $arr.Count) { return [string]$arr[[int]$r - 1].ou_dn }
+        return ''
+    }
+    try {
+        $f = New-Ec19Form 'College de destination (OU de jonction)' 560 480
+        Add-Header $f 'College de destination' | Out-Null
+        $lb = New-Object System.Windows.Forms.ListBox
+        $lb.Location = New-Object System.Drawing.Point(20, 75)
+        $lb.Size = New-Object System.Drawing.Size(510, 320)
+        $lb.Font = New-Object System.Drawing.Font('Segoe UI', 11)
+        [void]$lb.Items.Add('AUCUN (OU par defaut)')
+        foreach ($o in $arr) { [void]$lb.Items.Add($o.label) }
+        $lb.SelectedIndex = 0
+        $f.Controls.Add($lb)
+        $btn = New-Object System.Windows.Forms.Button
+        $btn.Text = 'Valider'
+        $btn.Size = New-Object System.Drawing.Size(150, 42)
+        $btn.Location = New-Object System.Drawing.Point(380, 405)
+        $btn.Font = New-Object System.Drawing.Font('Segoe UI', 12, [System.Drawing.FontStyle]::Bold)
+        $btn.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215); $btn.ForeColor = [System.Drawing.Color]::White; $btn.FlatStyle = 'Flat'
+        $btn.Add_Click({ $f.Tag = $lb.SelectedIndex; $f.Close() })
+        $f.Controls.Add($btn)
+        $f.Tag = 0
+        $f.ShowDialog() | Out-Null
+        $idx = [int]$f.Tag
+        if ($idx -le 0) { return '' }
+        return [string]$arr[$idx - 1].ou_dn
+    } catch {
+        $script:GuiOk = $false
+        return (Show-OuPicker $ous)
+    }
+}
+
 function Show-CaptureDialog($default, $model) {
     if (-not $script:GuiOk) {
         if ($model) { Write-Host "Modele detecte : $model" -ForegroundColor Green }
