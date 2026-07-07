@@ -15,6 +15,10 @@ $Pass   = '<MOT_DE_PASSE_SVC_WDS>'
 function Fail($m){ Write-Host "`nERREUR (bootstrap): $m" -ForegroundColor Red; Read-Host 'Tape Entree pour redemarrer'; wpeutil reboot }
 
 try {
+    # Garde-fou : le placeholder n'a pas ete remplace -> message clair (au lieu d'une erreur net use cryptique).
+    if ([string]::IsNullOrWhiteSpace($Pass) -or $Pass -like '*MOT_DE_PASSE*') {
+        Fail "Mot de passe non renseigne : ce WinPE embarque le modele bootstrap.ps1 (placeholder). Reinjecte bootstrap.local.ps1 (avec le vrai mot de passe svc.wds), renommee bootstrap.ps1."
+    }
     Write-Host "Connexion a $Share (utilisateur $User)" -ForegroundColor Cyan
     # Montage SANS cmd : le mot de passe peut contenir & | < > ^ ( ) etc. qui casseraient
     # une ligne "cmd /c net use ...". On tente d'abord New-SmbMapping (mot de passe passe en
