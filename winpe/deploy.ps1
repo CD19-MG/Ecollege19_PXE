@@ -35,11 +35,16 @@ function Report($phase, $status, $msg) {
 }
 
 # Config depuis la page web (modeles + reglages). Repli silencieux si injoignable.
+# RETRY : juste apres le montage SMB, la pile HTTPS n'est pas toujours chaude (1er appel ->
+# "underlying connection was closed / unexpected error on a send"). On reessaie quelques fois.
 $script:CfgErr = ''
 function Get-PxeConfig {
     if (-not $ReportToken -or $ReportToken -like '*JETON*') { $script:CfgErr = 'jeton $ReportToken non renseigne (placeholder)'; return $null }
-    try { return Invoke-RestMethod -Uri $ConfigUrl -Method Get -Headers @{ 'X-PXE-Token'=$ReportToken } -TimeoutSec 8 }
-    catch { $script:CfgErr = $_.Exception.Message; return $null }
+    for ($i = 1; $i -le 5; $i++) {
+        try { return Invoke-RestMethod -Uri $ConfigUrl -Method Get -Headers @{ 'X-PXE-Token'=$ReportToken } -TimeoutSec 10 }
+        catch { $script:CfgErr = $_.Exception.Message; if ($i -lt 5) { Start-Sleep -Seconds 3 } }
+    }
+    return $null
 }
 
 # Resout le dossier de pilotes via les regles du registre web (agnostique marque). $null si aucune.
@@ -85,20 +90,8 @@ try {
 
     Write-Host "=== Deploiement eCollege19 (WinPE) ===" -ForegroundColor Cyan
     if (-not (Test-Path $ImgDir)) { Fail "Dossier $ImgDir injoignable." }
-
-    # Config depuis la page web (registre modeles + reglages). Repli sur les valeurs par defaut.
-    $PxeCfg = Get-PxeConfig
-    if ($PxeCfg) {
-        Write-Host ("[config] recue : models=" + @($PxeCfg.models).Count + " ous=" + @($PxeCfg.ous).Count + " settings.disk=" + $PxeCfg.settings.disk) -ForegroundColor DarkCyan
-    } else {
-        Write-Host ("[config] AUCUNE config recue. Erreur : " + $script:CfgErr) -ForegroundColor Yellow
-        Write-Host ("[config] URL testee : " + $ConfigUrl) -ForegroundColor DarkGray
-    }
-    if ($PxeCfg -and $PxeCfg.settings) {
-        if ("$($PxeCfg.settings.disk)" -match '^\d+$') { $Disk = [int]$PxeCfg.settings.disk }
-        if ($PxeCfg.settings.unattend) { $Unattend = Join-Path "$Share\unattend" ([string]$PxeCfg.settings.unattend) }
-        Write-Host ("Config web chargee (disque $Disk, unattend " + (Split-Path $Unattend -Leaf) + ").") -ForegroundColor DarkGray
-    }
+    # La config web est recuperee PLUS BAS (apres le choix de l'image) : la pile HTTPS a alors
+    # eu le temps de chauffer, le 1er GET ne casse plus ("unexpected error on a send").
 
     # Liste categorisee : images par MODELE (captures, a jour) d'abord, puis installations completes.
     $modelDir = Join-Path $ImgDir 'modeles'
@@ -167,6 +160,20 @@ try {
         Write-Host "`nPlusieurs images dans ce WIM :" -ForegroundColor Cyan
         foreach ($im in $imgs) { Write-Host "  index $($im.ImageIndex) : $($im.ImageName)" }
         $index = [int](Read-Host 'Index a appliquer')
+    }
+
+    # --- Config web (registre modeles + reglages), recuperee ICI : la pile HTTPS a chauffe
+    # pendant le choix de l'image -> le GET passe (contrairement a un appel des le demarrage).
+    $PxeCfg = Get-PxeConfig
+    if ($PxeCfg) {
+        Write-Host ("[config] recue : models=" + @($PxeCfg.models).Count + " ous=" + @($PxeCfg.ous).Count + " settings.disk=" + $PxeCfg.settings.disk) -ForegroundColor DarkCyan
+    } else {
+        Write-Host ("[config] AUCUNE config recue. Erreur : " + $script:CfgErr) -ForegroundColor Yellow
+        Write-Host ("[config] URL testee : " + $ConfigUrl) -ForegroundColor DarkGray
+    }
+    if ($PxeCfg -and $PxeCfg.settings) {
+        if ("$($PxeCfg.settings.disk)" -match '^\d+$') { $Disk = [int]$PxeCfg.settings.disk }
+        if ($PxeCfg.settings.unattend) { $Unattend = Join-Path "$Share\unattend" ([string]$PxeCfg.settings.unattend) }
     }
 
     # Choix college -> OU (ou mode MASTER sans jonction). Toujours propose (AUCUN + MASTER meme sans OU).
