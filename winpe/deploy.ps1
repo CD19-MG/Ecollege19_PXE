@@ -164,16 +164,23 @@ exit
         Write-Host "Outil de capture depose dans C:\Ec19 (admins uniquement)." -ForegroundColor Cyan
     }
 
-    # Pilotes : dossier du modele (nomme par SysID) sinon tous (match PnP)
+    # Pilotes : dossier du modele, nomme selon le fabricant. On essaie plusieurs identifiants :
+    #  - HP     : SysID = Win32_BaseBoard.Product          (ex. 8AC9)
+    #  - Lenovo : machine type = 4 premiers car. du Model   (ex. 13HR)
+    # On prend le premier dossier existant sous drivers\ ; sinon repli sur TOUS les pilotes (match PnP).
     Report 'pilotes' 'running' $Model
     if (Test-Path $DrvDir) {
-        $sysId = (Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue).Product
-        $modelDir = if ($sysId) { Join-Path $DrvDir $sysId } else { $null }
-        if ($modelDir -and (Test-Path $modelDir)) {
-            Write-Host "Pilotes du modele $sysId..." -ForegroundColor Cyan
-            dism /Image:W:\ /Add-Driver /Driver:$modelDir /Recurse
+        $cands = @()
+        try { $cands += (Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue).Product } catch {}
+        try { $mdl = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).Model; if ($mdl -and $mdl.Length -ge 4) { $cands += $mdl.Substring(0,4) } } catch {}
+        $cands = @($cands | Where-Object { $_ } | Select-Object -Unique)
+        $drvHit = $null
+        foreach ($c in $cands) { $p = Join-Path $DrvDir $c; if (Test-Path $p) { $drvHit = $p; break } }
+        if ($drvHit) {
+            Write-Host ("Pilotes du modele ({0})..." -f (Split-Path $drvHit -Leaf)) -ForegroundColor Cyan
+            dism /Image:W:\ /Add-Driver /Driver:$drvHit /Recurse
         } else {
-            Write-Host "SysID '$sysId' sans dossier dedie -> tous les pilotes (PnP)..." -ForegroundColor Cyan
+            Write-Host ("Aucun dossier pilote dedie (essaye : {0}) -> tous les pilotes (PnP)..." -f ($cands -join ', ')) -ForegroundColor Cyan
             dism /Image:W:\ /Add-Driver /Driver:$DrvDir /Recurse
         }
     }

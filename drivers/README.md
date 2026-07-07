@@ -1,8 +1,22 @@
 # Pilotes — packages WDS + groupes filtrés par modèle (parc hétérogène)
 
-Parc **multi-modèles** (HP variés + Lenovo à venir) → on utilise les **packages de pilotes WDS** avec
-des **groupes filtrés** : WDS injecte automatiquement **le bon groupe selon la machine**. Ajouter un
-modèle = ajouter son pack + un groupe filtré. Aucun MDT nécessaire.
+Parc **multi-modèles** (HP variés + **Lenovo**). 
+
+> **⚠️ Méthode ACTUELLE (Voie B — WinPE `deploy.ps1`)** : les groupes/packages WDS ci-dessous relèvent
+> de l'ancienne approche (client WDS, déprécié Server 2025). Aujourd'hui `winpe/deploy.ps1` injecte les
+> pilotes depuis un **dossier par modèle** sur le partage : **`\\stats\Deploy$\drivers\<ID>\`**, où
+> `<ID>` est :
+> - **HP** : le **SysID** = `(Get-CimInstance Win32_BaseBoard).Product` (ex. `8AC9`, `8591`) ;
+> - **Lenovo** : le **machine type** = les **4 premiers caractères** de `(Get-CimInstance
+>   Win32_ComputerSystem).Model` (ex. **`13HR`**).
+>
+> `deploy.ps1` essaie ces identifiants dans l'ordre et injecte le **premier dossier existant** (`dism
+> /Add-Driver /Recurse`), sinon replie sur **tout** `drivers\` (match PnP). Donc pour un Lenovo `13HR` :
+> extraire le driver pack dans **`drivers\13HR\`** et c'est tout. Le reste de ce README (packages/groupes
+> WDS) reste utile si un jour on repasse par WDS, mais n'est pas le flux courant.
+
+Ancienne approche (WDS) : **packages de pilotes WDS** avec **groupes filtrés** : WDS injecte
+automatiquement **le bon groupe selon la machine**. Ajouter un modèle = ajouter son pack + un groupe filtré.
 
 ## Principe
 1. **Importer les packages de pilotes** dans WDS (console WDS > *Pilotes* > *Ajouter un package de pilotes*).
@@ -45,8 +59,9 @@ Repli manuel : `support.hp.com` → modèle → « Driver Pack » → extraire l
 - HP Pro Mini **400 G9** Desktop PC
 - HP ProDesk 400 **G4** SFF
 - HP ProDesk 400 **G6** · « Desktop Mini » / « SFF » → 1 (ou 2 selon le format)
-- **Lenovo** <à venir> → pack Lenovo + groupe filtré `Manufacturer=LENOVO` (⚠️ nom commercial dans
-  `Win32_ComputerSystemProduct.Version`, pas dans `Model` qui = le code type).
+- **Lenovo** machine type **`13HR`** (nouveaux postes) → SCCM driver pack Lenovo pour ce MT, extrait
+  dans **`drivers\13HR\`** (Voie B). ⚠️ Sur Lenovo, `Model` = le **MTM/code type** (les 4 premiers car.
+  = le machine type `13HR`) et le **nom commercial** est dans `Win32_ComputerSystemProduct.Version`.
 
 ## Alternative simple (moins de groupes)
 Si gérer un groupe par plateforme est fastidieux : **un seul groupe « HP »** filtré `Manufacturer=HP`
