@@ -17,6 +17,7 @@ $Disk     = 0
 
 # --- Remontee d'etat vers le dashboard (Phase 3b). Best-effort : ne bloque JAMAIS le deploiement.
 $ReportUrl   = 'https://stats.ecollege19.lan/pc/api/pxe/report'   # hostname du certificat (srv-pxe = alias)
+$ConfigUrl   = 'https://stats.ecollege19.lan/pc/api/pxe/config'   # registre modeles + reglages (page web)
 $ReportToken = '<JETON_PXE>'                                      # a renseigner sur le partage (hors depot)
 $JobId  = ([guid]::NewGuid()).Guid
 $ImgName = ''
@@ -31,6 +32,38 @@ function Report($phase, $status, $msg) {
         $body = @{ job_id=$JobId; mac=$Mac; hostname=$env:COMPUTERNAME; model=$Model; action='deploy'; image=$ImgName; phase=$phase; status=$status; message=$msg } | ConvertTo-Json -Compress
         Invoke-RestMethod -Uri $ReportUrl -Method Post -Headers @{ 'X-PXE-Token'=$ReportToken } -ContentType 'application/json' -Body $body -TimeoutSec 8 | Out-Null
     } catch { }   # une remontee ratee n'interrompt pas le deploiement
+}
+
+# Config depuis la page web (modeles + reglages). Repli silencieux si injoignable.
+function Get-PxeConfig {
+    if (-not $ReportToken -or $ReportToken -like '*JETON*') { return $null }
+    try { return Invoke-RestMethod -Uri $ConfigUrl -Method Get -Headers @{ 'X-PXE-Token'=$ReportToken } -TimeoutSec 8 } catch { return $null }
+}
+
+# Resout le dossier de pilotes via les regles du registre web (agnostique marque). $null si aucune.
+function Resolve-DriverFolder($cfg) {
+    if (-not $cfg -or -not $cfg.models) { return $null }
+    $facts = @{}
+    try { $facts['sysid'] = (Get-CimInstance Win32_BaseBoard -EA SilentlyContinue).Product } catch {}
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue
+        $facts['model'] = $cs.Model; $facts['manufacturer'] = $cs.Manufacturer
+        if ($cs.Model -and $cs.Model.Length -ge 4) { $facts['machinetype'] = $cs.Model.Substring(0,4) }
+    } catch {}
+    foreach ($m in $cfg.models) {
+        $fv = [string]$facts[[string]$m.match_field]
+        if (-not $fv) { continue }
+        $val = [string]$m.match_value
+        $ok = $false
+        switch ($m.match_op) {
+            'equals'     { $ok = ($fv -ieq $val) }
+            'contains'   { $ok = ($fv -like "*$val*") }
+            'startswith' { $ok = ($fv -like "$val*") }
+            'regex'      { try { $ok = ($fv -imatch $val) } catch { $ok = $false } }
+        }
+        if ($ok -and $m.driver_folder) { return [string]$m.driver_folder }
+    }
+    return $null
 }
 
 function Fail($m){
@@ -48,6 +81,14 @@ try {
 
     Write-Host "=== Deploiement eCollege19 (WinPE) ===" -ForegroundColor Cyan
     if (-not (Test-Path $ImgDir)) { Fail "Dossier $ImgDir injoignable." }
+
+    # Config depuis la page web (registre modeles + reglages). Repli sur les valeurs par defaut.
+    $PxeCfg = Get-PxeConfig
+    if ($PxeCfg -and $PxeCfg.settings) {
+        if ("$($PxeCfg.settings.disk)" -match '^\d+$') { $Disk = [int]$PxeCfg.settings.disk }
+        if ($PxeCfg.settings.unattend) { $Unattend = Join-Path "$Share\unattend" ([string]$PxeCfg.settings.unattend) }
+        Write-Host ("Config web chargee (disque $Disk, unattend " + (Split-Path $Unattend -Leaf) + ").") -ForegroundColor DarkGray
+    }
 
     # Liste categorisee : images par MODELE (captures, a jour) d'abord, puis installations completes.
     $modelDir = Join-Path $ImgDir 'modeles'
@@ -170,12 +211,16 @@ exit
     # On prend le premier dossier existant sous drivers\ ; sinon repli sur TOUS les pilotes (match PnP).
     Report 'pilotes' 'running' $Model
     if (Test-Path $DrvDir) {
+        $drvHit = $null
+        # 1) Registre web (regles de detection, toutes marques)
+        $cfgFolder = Resolve-DriverFolder $PxeCfg
+        if ($cfgFolder) { $p = Join-Path $DrvDir $cfgFolder; if (Test-Path $p) { $drvHit = $p } }
+        # 2) Repli heuristique : SysID HP puis machine type Lenovo
         $cands = @()
         try { $cands += (Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue).Product } catch {}
         try { $mdl = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).Model; if ($mdl -and $mdl.Length -ge 4) { $cands += $mdl.Substring(0,4) } } catch {}
         $cands = @($cands | Where-Object { $_ } | Select-Object -Unique)
-        $drvHit = $null
-        foreach ($c in $cands) { $p = Join-Path $DrvDir $c; if (Test-Path $p) { $drvHit = $p; break } }
+        if (-not $drvHit) { foreach ($c in $cands) { $p = Join-Path $DrvDir $c; if (Test-Path $p) { $drvHit = $p; break } } }
         if ($drvHit) {
             Write-Host ("Pilotes du modele ({0})..." -f (Split-Path $drvHit -Leaf)) -ForegroundColor Cyan
             dism /Image:W:\ /Add-Driver /Driver:$drvHit /Recurse
