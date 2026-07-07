@@ -34,7 +34,14 @@ echo(
 echo   Generalisation en cours... le poste va s'eteindre tout seul.
 echo   (ne rien faire, patientez)
 echo(
-"%WINDIR%\System32\Sysprep\sysprep.exe" /generalize /oobe /shutdown
+rem generalize.xml (SkipRearm) a cote -> on ne consomme pas le compteur de rearm
+rem (on peut re-syspreper un master autant de fois qu'on veut).
+set "GEN=%~dp0generalize.xml"
+if exist "%GEN%" (
+  "%WINDIR%\System32\Sysprep\sysprep.exe" /generalize /oobe /shutdown /unattend:"%GEN%"
+) else (
+  "%WINDIR%\System32\Sysprep\sysprep.exe" /generalize /oobe /shutdown
+)
 
 rem Si sysprep echoue, il n'eteint pas : on laisse la fenetre ouverte pour lire l'erreur.
 echo(

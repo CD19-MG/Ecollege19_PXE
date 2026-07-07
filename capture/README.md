@@ -29,10 +29,27 @@ PXE, prête à être déployée sur les postes du même modèle.
   prévient s'il ne détecte pas de sysprep réussi.
 - **Nom par modèle** : le défaut proposé est le modèle détecté (ex. `HP_EliteDesk_800_G5_DM`).
   Garde ce nom pour t'y retrouver : une image = un modèle.
-- Le poste modèle **ne doit pas être joint au domaine** au moment de la capture (la jonction se fait
-  automatiquement au déploiement via l'unattend). Construire le modèle hors domaine.
+- Le poste modèle **ne doit pas être joint au domaine** au moment de la capture. Le plus propre :
+  déployer le master via l'option **« Préparer un MASTER (NE PAS joindre le domaine) »** au déploiement
+  (deploy.ps1 retire la jonction de l'unattend) → image de référence propre ; la jonction se fait
+  ensuite au déploiement des postes.
 - Si `sysprep` échoue et que le poste ne s'éteint pas : cause la plus fréquente = une **application du
-  Microsoft Store**. Voir `%WINDIR%\System32\Sysprep\Panther\setuperr.log`.
+  Microsoft Store** (ex. winget mis à jour par-utilisateur). Voir `%WINDIR%\System32\Sysprep\Panther\setuperr.log` ;
+  retirer le paquet fautif (`Get-AppxPackage <nom> | Remove-AppxPackage`). Préférer les **installeurs MSI/EXE
+  machine-wide** sur un master.
+
+## Maintenir un MASTER (le mettre à jour et re-capturer)
+
+Les PC masters restent **au bureau** (ne pas les déployer en collège). Pour les tenir à jour :
+1. **Rallumer** le master (il repasse par l'OOBE puisqu'il a été généralisé → ouvrir en admin local ;
+   comme il est hors domaine, pas de jonction).
+2. **Mettre à jour** (Windows Update, logiciels).
+3. Relancer **`C:\Ec19\Preparer-la-capture.cmd`** → sysprep → extinction, puis PXE → **Capturer**
+   (même nom → écrase l'image → elle repasse « à jour »/verte dans la console).
+
+`Preparer-la-capture.cmd` lance sysprep avec **`generalize.xml` (SkipRearm=1)** s'il est à côté → le
+**compteur de rearm** d'activation (limite ~3) n'est **pas consommé** → tu peux re-syspreper le master
+autant de fois que nécessaire. `generalize.xml` est déposé automatiquement à côté du `.cmd` (dans `C:\Ec19`).
 
 ## Où trouver `Préparer-la-capture.cmd` sur un poste
 
@@ -43,8 +60,8 @@ PXE, prête à être déployée sur les postes du même modèle.
 - **Anciens postes (non redéployés)** : copier le fichier `capture/Preparer-la-capture.cmd`
   manuellement (clé USB / partage), dans un emplacement accessible à l'admin uniquement.
 
-> Pour que le dépôt automatique fonctionne, placer `Preparer-la-capture.cmd` **à la racine du
-> partage** (`\\stats\Deploy$\Preparer-la-capture.cmd`) — `deploy.ps1` le copie de là.
+> Pour que le dépôt automatique fonctionne, placer **`Preparer-la-capture.cmd` ET `generalize.xml`
+> à la racine du partage** (`\\stats\Deploy$\`) — `deploy.ps1` les copie dans `C:\Ec19`.
 > Note : `sysprep` exige de toute façon l'élévation administrateur ; un élève ne peut pas le lancer.
 
 ## Côté serveur (une seule fois, par l'admin)

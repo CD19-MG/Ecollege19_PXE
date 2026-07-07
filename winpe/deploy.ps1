@@ -261,6 +261,9 @@ exit
         $toolDir = 'W:\Ec19'
         New-Item -ItemType Directory -Force -Path $toolDir | Out-Null
         Copy-Item $CaptureCmd (Join-Path $toolDir 'Preparer-la-capture.cmd') -Force
+        # generalize.xml (SkipRearm) a cote du .cmd -> re-sysprep du master sans limite de rearm
+        $genXml = "$Share\generalize.xml"
+        if (Test-Path $genXml) { Copy-Item $genXml (Join-Path $toolDir 'generalize.xml') -Force }
         icacls $toolDir /inheritance:r /grant "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
         Write-Host "Outil de capture depose dans C:\Ec19 (admins uniquement)." -ForegroundColor Cyan
     }

@@ -160,7 +160,8 @@ try {
     Write-Host ''
     Write-Host "OK - image disponible au deploiement : modeles\$name.wim" -ForegroundColor Green
     Write-Host "Elle apparaitra en tete de liste (categorie MODELE) au prochain PXE ([1] Installer)." -ForegroundColor Green
-    Write-Host "NE PAS demarrer ce poste sur son disque (il est generalise) : eteins-le depuis le menu." -ForegroundColor Yellow
+    Write-Host "Ce poste est un PC MASTER (image de reference) : NE PAS le deployer/utiliser dans les colleges." -ForegroundColor Yellow
+    Write-Host "A garder au bureau pour la maintenance : le rallumer, mettre a jour, puis re-lancer Preparer-la-capture.cmd (re-sysprep sans limite) et re-capturer." -ForegroundColor Yellow
     try { Stop-Transcript | Out-Null } catch {}
     Read-Host 'Tape Entree pour revenir au menu'
     # Pas de reboot : la reference est generalisee (sysprep). Retour au menu -> Eteindre / autre.
