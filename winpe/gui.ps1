@@ -153,6 +153,7 @@ function Show-ImagePicker($items, $recIndex = -1) {
         $lv.View = 'Details'
         $lv.FullRowSelect = $true
         $lv.MultiSelect = $false
+        $lv.HideSelection = $false   # garde la ligne surlignee meme quand le focus part sur un bouton
         $lv.HeaderStyle = 'Nonclickable'
         $lv.Font = New-Object System.Drawing.Font('Segoe UI', 11)
         $lv.Columns.Add('Image', 400) | Out-Null
@@ -178,6 +179,15 @@ function Show-ImagePicker($items, $recIndex = -1) {
         $chk.Size = New-Object System.Drawing.Size(560, 30)
         $chk.ForeColor = [System.Drawing.Color]::FromArgb(180, 0, 0)
         $f.Controls.Add($chk)
+
+        # Rappel EN CLAIR de l'image selectionnee (mis a jour a chaque changement de selection).
+        $updSel = {
+            if ($lv.SelectedItems.Count -gt 0) {
+                $chk.Text = "Je confirme : EFFACER ce poste et installer  ->  " + $lv.SelectedItems[0].Text
+            } else { $chk.Text = "Selectionne une image ci-dessus" }
+        }
+        $lv.Add_SelectedIndexChanged($updSel)
+        & $updSel
 
         $btnOk = New-Object System.Windows.Forms.Button
         $btnOk.Text = 'Installer'
@@ -235,6 +245,18 @@ function Show-OuPicker($ous) {
         foreach ($o in $arr) { [void]$lb.Items.Add($o.label) }
         $lb.SelectedIndex = 0
         $f.Controls.Add($lb)
+
+        # Rappel EN CLAIR du college selectionne (mis a jour a chaque changement).
+        $lblSel = New-Object System.Windows.Forms.Label
+        $lblSel.Location = New-Object System.Drawing.Point(20, 405)
+        $lblSel.Size = New-Object System.Drawing.Size(350, 42)
+        $lblSel.Font = New-Object System.Drawing.Font('Segoe UI', 10, [System.Drawing.FontStyle]::Bold)
+        $lblSel.ForeColor = [System.Drawing.Color]::FromArgb(0, 90, 158)
+        $f.Controls.Add($lblSel)
+        $updOu = { $lblSel.Text = 'Choisi : ' + $lb.SelectedItem }
+        $lb.Add_SelectedIndexChanged($updOu)
+        & $updOu
+
         $btn = New-Object System.Windows.Forms.Button
         $btn.Text = 'Valider'
         $btn.Size = New-Object System.Drawing.Size(150, 42)
