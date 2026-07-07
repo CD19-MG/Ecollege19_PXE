@@ -17,6 +17,7 @@ $ModelDir  = "$ImgDir\modeles"   # les captures vont ici -> categorie "par model
 
 # --- Remontee d'etat vers le dashboard (Phase 3b). Best-effort : ne bloque JAMAIS la capture.
 $ReportUrl   = 'https://stats.ecollege19.lan/pc/api/pxe/report'   # hostname du certificat (srv-pxe = alias)
+$ConfigUrl   = 'https://stats.ecollege19.lan/pc/api/pxe/config'   # registre modeles (pour le nom parlant)
 $ReportToken = '<JETON_PXE>'                                      # a renseigner sur le partage (hors depot)
 $JobId  = ([guid]::NewGuid()).Guid
 $ImgName = ''
@@ -31,6 +32,35 @@ function Report($phase, $status, $msg) {
         $body = @{ job_id=$JobId; mac=$Mac; hostname=$env:COMPUTERNAME; model=$Model; action='capture'; image=$ImgName; phase=$phase; status=$status; message=$msg } | ConvertTo-Json -Compress
         Invoke-RestMethod -Uri $ReportUrl -Method Post -Headers @{ 'X-PXE-Token'=$ReportToken } -ContentType 'application/json' -Body $body -TimeoutSec 8 | Out-Null
     } catch { }
+}
+
+# Registre des modeles (pour proposer un NOM PARLANT = le libelle declare). Repli silencieux.
+function Get-PxeConfig {
+    if (-not $ReportToken -or $ReportToken -like '*JETON*') { return $null }
+    try { return Invoke-RestMethod -Uri $ConfigUrl -Method Get -Headers @{ 'X-PXE-Token'=$ReportToken } -TimeoutSec 8 } catch { return $null }
+}
+# Renvoie le libelle du modele qui matche cette machine (regles du registre), ou '' si aucun.
+function Resolve-ModelLabel($cfg) {
+    if (-not $cfg -or -not $cfg.models) { return '' }
+    $facts = @{}
+    try { $facts['sysid'] = (Get-CimInstance Win32_BaseBoard -EA SilentlyContinue).Product } catch {}
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue
+        $facts['model'] = $cs.Model; $facts['manufacturer'] = $cs.Manufacturer
+        if ($cs.Model -and $cs.Model.Length -ge 4) { $facts['machinetype'] = $cs.Model.Substring(0,4) }
+    } catch {}
+    foreach ($m in $cfg.models) {
+        $fv = [string]$facts[[string]$m.match_field]; if (-not $fv) { continue }
+        $val = [string]$m.match_value; $ok = $false
+        switch ($m.match_op) {
+            'equals'     { $ok = ($fv -ieq $val) }
+            'contains'   { $ok = ($fv -like "*$val*") }
+            'startswith' { $ok = ($fv -like "$val*") }
+            'regex'      { try { $ok = ($fv -imatch $val) } catch { $ok = $false } }
+        }
+        if ($ok -and $m.label) { return [string]$m.label }
+    }
+    return ''
 }
 
 # Erreur recuperable : affichage + pause puis RETOUR AU MENU (throw sentinelle) au lieu de rebooter.
@@ -65,15 +95,20 @@ try {
         if ((Read-Host "Continuer quand meme ? (tape OUI)") -ne 'OUI') { Fail 'Annule par l operateur.' }
     }
 
-    # Nom par defaut = modele du poste (auto-detecte), nettoye pour un nom de fichier
+    # Nom par defaut : on prefere le LIBELLE PARLANT du registre (ex. "Lenovo neo 50q Gen 6")
+    # si la machine matche un modele declare ; sinon on retombe sur le code modele brut (ex. 13HR001BFR).
     $model = ''
     try { $model = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).Model } catch {}
     $sysId = ''
     try { $sysId = (Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue).Product } catch {}
-    $def = if ($model) { $model } else { 'Reference' }
+    $label = ''
+    try { $label = Resolve-ModelLabel (Get-PxeConfig) } catch {}
+    $def = if ($label) { $label } elseif ($model) { $model } else { 'Reference' }
     $def = ($def -replace '[^\w\-]', '_') -replace '_+', '_'
     $def = $def.Trim('_')
     if ($sysId) { Write-Host "Modele detecte : $model (SysID $sysId)" -ForegroundColor Green }
+    if ($label) { Write-Host "Modele reconnu dans le registre : $label -> nom propose" -ForegroundColor Green }
+    else { Write-Host "Modele non declare dans le registre (nom propose = code brut). Astuce : declare-le dans Modeles & config pour un nom parlant." -ForegroundColor DarkGray }
 
     # Nom via l'interface graphique si dispo (gui.ps1 sur le partage), sinon invite texte
     $gui = "$Share\gui.ps1"
@@ -82,6 +117,7 @@ try {
         . $gui
         if (Test-Gui) {
             $lbl = if ($sysId) { "$model (SysID $sysId)" } else { $model }
+            if ($label) { $lbl = "$label  -  $model (SysID $sysId)" }
             $name = Show-CaptureDialog $def $lbl
             if ($null -eq $name) { Fail 'Annule par l operateur.' }
         }
