@@ -22,6 +22,49 @@ try {
 
 function Test-Gui { return $script:GuiOk }
 
+# ── Barre de progression dism (une seule ligne mise a jour en place) ─────────
+# Dessine [=====45.0%=====] avec le pourcentage centre, au lieu du mode verbeux dism.
+function Write-DismBar($pct) {
+    $w = 54
+    $fill = [int][math]::Round($w * $pct / 100.0)
+    if ($fill -lt 0) { $fill = 0 } elseif ($fill -gt $w) { $fill = $w }
+    $bar = ('=' * $fill) + (' ' * ($w - $fill))
+    $label = ('{0:N1}%' -f $pct)
+    $pos = [int](($w - $label.Length) / 2); if ($pos -lt 0) { $pos = 0 }
+    if ($pos + $label.Length -le $w) { $bar = $bar.Substring(0, $pos) + $label + $bar.Substring($pos + $label.Length) }
+    Write-Host ("`r[$bar]") -NoNewline -ForegroundColor Cyan
+}
+
+# Lance dism.exe avec les arguments donnes (chaine unique), affiche une barre a partir
+# du pourcentage, et renvoie le code de sortie. Le texte verbeux de dism est absorbe.
+function Invoke-DismBar($argString) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'dism.exe'
+    $psi.Arguments = $argString
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.CreateNoWindow = $true
+    $p = New-Object System.Diagnostics.Process
+    $p.StartInfo = $psi
+    [void]$p.Start()
+    $buf = ''; $last = -1.0
+    while (($ch = $p.StandardOutput.Read()) -ge 0) {
+        $c = [char]$ch
+        if ($c -eq "`b" -or $c -eq "`r" -or $c -eq "`n") {
+            $m = [regex]::Match($buf, '(\d+([.,]\d+)?)\s*%')
+            if ($m.Success) {
+                $pct = [double]($m.Groups[1].Value -replace ',', '.')
+                if ($pct -ne $last) { Write-DismBar $pct; $last = $pct }
+            }
+            $buf = ''
+        } else { $buf += $c }
+    }
+    $p.WaitForExit()
+    if ($last -ge 0) { Write-DismBar 100.0 }
+    Write-Host ''
+    return $p.ExitCode
+}
+
 function New-Ec19Form($title, $w, $h) {
     $f = New-Object System.Windows.Forms.Form
     $f.Text = $title

@@ -139,8 +139,13 @@ try {
     $ImgName = "$name.wim"
     Report 'application' 'running' "Capture $ImgName"
     Write-Host "Capture de $win -> images\modeles\$name.wim (plusieurs minutes)..." -ForegroundColor Cyan
-    dism /Capture-Image /ImageFile:"$dest" /CaptureDir:$win\ /Name:"$name" /Compress:max
-    if ($LASTEXITCODE -ne 0) { Fail "dism /Capture-Image a echoue (code $LASTEXITCODE)." }
+    if (Get-Command Invoke-DismBar -ErrorAction SilentlyContinue) {
+        $code = Invoke-DismBar ('/Capture-Image /ImageFile:"' + $dest + '" /CaptureDir:' + $win + '\ /Name:"' + $name + '" /Compress:max')
+    } else {
+        dism /Capture-Image /ImageFile:"$dest" /CaptureDir:$win\ /Name:"$name" /Compress:max
+        $code = $LASTEXITCODE
+    }
+    if ($code -ne 0) { Fail "dism /Capture-Image a echoue (code $code)." }
 
     Report 'termine' 'ok' "Image $ImgName capturee"
     Write-Host ''

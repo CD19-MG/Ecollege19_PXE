@@ -201,11 +201,16 @@ exit
     diskpart /s X:\dp.txt
     if ($LASTEXITCODE -ne 0) { Fail "diskpart a echoue (code $LASTEXITCODE)." }
 
-    # Apply du WIM
+    # Apply du WIM (barre de progression au lieu du mode verbeux si dispo)
     Report 'application' 'running' "index $index"
     Write-Host "Application de l'image (peut prendre plusieurs minutes)..." -ForegroundColor Cyan
-    dism /Apply-Image /ImageFile:"$wim" /Index:$index /ApplyDir:W:\
-    if ($LASTEXITCODE -ne 0) { Fail "dism /Apply-Image a echoue (code $LASTEXITCODE)." }
+    if (Get-Command Invoke-DismBar -ErrorAction SilentlyContinue) {
+        $code = Invoke-DismBar ('/Apply-Image /ImageFile:"' + $wim + '" /Index:' + $index + ' /ApplyDir:W:\')
+    } else {
+        dism /Apply-Image /ImageFile:"$wim" /Index:$index /ApplyDir:W:\
+        $code = $LASTEXITCODE
+    }
+    if ($code -ne 0) { Fail "dism /Apply-Image a echoue (code $code)." }
 
     # Unattend (jonction + admin local + locale) -> traite au 1er boot.
     # Si un college a ete choisi, on injecte <MachineObjectOU> dans l'unattend (le poste rejoint
