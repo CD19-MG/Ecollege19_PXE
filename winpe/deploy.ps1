@@ -300,11 +300,17 @@ exit
         $cands = @($cands | Where-Object { $_ } | Select-Object -Unique)
         if (-not $drvHit) { foreach ($c in $cands) { $p = Join-Path $DrvDir $c; if (Test-Path $p) { $drvHit = $p; break } } }
         if ($drvHit) {
-            Write-Host ("Pilotes du modele ({0})..." -f (Split-Path $drvHit -Leaf)) -ForegroundColor Cyan
-            dism /Image:W:\ /Add-Driver /Driver:$drvHit /Recurse
+            Write-Host ("Injection des pilotes du modele ({0})..." -f (Split-Path $drvHit -Leaf)) -ForegroundColor Cyan
+            $drvTarget = $drvHit
         } else {
             Write-Host ("Aucun dossier pilote dedie (essaye : {0}) -> tous les pilotes (PnP)..." -f ($cands -join ', ')) -ForegroundColor Cyan
-            dism /Image:W:\ /Add-Driver /Driver:$DrvDir /Recurse
+            $drvTarget = $DrvDir
+        }
+        # Barre de progression (comme l'apply) ; sinon dism direct.
+        if (Get-Command Invoke-DismBar -ErrorAction SilentlyContinue) {
+            Invoke-DismBar ('/Image:W:\ /Add-Driver /Driver:"' + $drvTarget + '" /Recurse') | Out-Null
+        } else {
+            dism /Image:W:\ /Add-Driver /Driver:$drvTarget /Recurse
         }
     }
 
