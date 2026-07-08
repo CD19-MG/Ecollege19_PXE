@@ -129,11 +129,30 @@ try {
     $guiLoaded = $false
     if (Test-Path $gui) { . $gui; $guiLoaded = (Test-Gui) }
 
+    # Type de poste : PEDAGOGIQUE (joint au domaine du college) ou ADMINISTRATIF (hors domaine,
+    # gere par le rectorat -> compte admin local, aucune jonction). Choisi UNE fois au debut.
+    $posteType = 'peda'
+    if (Get-Command Show-PosteType -ErrorAction SilentlyContinue) {
+        $posteType = Show-PosteType
+    } else {
+        Write-Host "`nType de poste : [1] Pedagogique  [2] Administratif" -ForegroundColor Cyan
+        $r = Read-Host 'Choix [1]'
+        $posteType = if ($r.Trim() -eq '2') { 'admin' } else { 'peda' }
+    }
+    if ([string]::IsNullOrEmpty($posteType)) {
+        Report 'annule' 'error' 'Annule au choix du type de poste (retour menu)'
+        Write-Host 'Annulation -> retour au menu.' -ForegroundColor Yellow
+        try { Stop-Transcript | Out-Null } catch {}
+        throw 'EC19_HANDLED'
+    }
+    if ($posteType -eq 'admin') { Write-Host 'Type : ADMINISTRATIF (hors domaine, compte admin local).' -ForegroundColor Magenta }
+    else { Write-Host 'Type : PEDAGOGIQUE (joint au domaine du college).' -ForegroundColor Green }
+
     # Boucle de navigation : image -> (index/config) -> OU -> Nom.
     # Depuis l'ecran OU/Nom on peut REVENIR (Retour) a l'etape precedente, ou ANNULER
     # (retour menu AVEC remontee de statut) -> plus besoin d'eteindre le poste pour sortir.
     $usedGui = $guiLoaded
-    $masterMode = $false; $ouDn = ''; $pcName = ''
+    $masterMode = $false; $adminMode = $false; $ouDn = ''; $pcName = ''
     $deployReady = $false
     while (-not $deployReady) {
         # --- Choix de l'image ---
@@ -189,8 +208,16 @@ try {
 
         # --- OU / Nom : sous-navigation (Retour = re-choix image ; Annuler = retour menu) ---
         $goBackToImage = $false
-        $masterMode = $false; $ouDn = ''; $pcName = ''
-        $stage = 'ou'
+        $masterMode = $false; $adminMode = $false; $ouDn = ''; $pcName = ''
+        if ($posteType -eq 'admin') {
+            # Poste ADMINISTRATIF : pas de choix d'OU, jamais joint au domaine (rectorat) -> on va
+            # directement au nom, avec compte admin local (jonction retiree de l'unattend plus bas).
+            $adminMode = $true
+            Write-Host "Destination : ADMINISTRATIF -> hors domaine (aucune jonction)." -ForegroundColor Magenta
+            $stage = 'name'
+        } else {
+            $stage = 'ou'
+        }
         while ($true) {
             if ($stage -eq 'ou') {
                 # Choix college -> OU (ou MASTER sans jonction). Toujours propose (AUCUN + MASTER meme sans OU).
@@ -230,7 +257,10 @@ try {
                 } else {
                     $pcName = Read-Host "Nom de l'ordinateur (vide = automatique ; 'retour' = revenir a la destination)"
                 }
-                if ($pcName -eq '__BACK__') { $stage = 'ou'; continue }
+                if ($pcName -eq '__BACK__') {
+                    if ($adminMode) { $goBackToImage = $true; break }   # pas d'OU en admin -> retour au choix de l'image
+                    $stage = 'ou'; continue
+                }
                 if ($pcName) {
                     $pcName = ($pcName -replace '[^A-Za-z0-9\-]', '')
                     if ($pcName.Length -gt 15) { $pcName = $pcName.Substring(0, 15) }
@@ -283,10 +313,12 @@ exit
     #  - OU de jonction (<MachineObjectOU>) si un college a ete choisi ;
     #  - mode MASTER : on RETIRE le composant UnattendedJoin -> le poste reste hors domaine.
     New-Item -ItemType Directory -Force -Path W:\Windows\Panther | Out-Null
-    if ($masterMode -or $ouDn -or $pcName) {
+    if ($masterMode -or $adminMode -or $ouDn -or $pcName) {
         $xmlua = Get-Content $Unattend -Raw
         if ($pcName) { $xmlua = $xmlua -replace '<ComputerName>.*?</ComputerName>', "<ComputerName>$pcName</ComputerName>" }
-        if ($masterMode) {
+        if ($masterMode -or $adminMode) {
+            # MASTER (image de reference) OU ADMINISTRATIF (rectorat) : hors domaine -> on RETIRE
+            # le composant UnattendedJoin (le compte admin local de l'unattend suffit).
             $xmlua = $xmlua -replace '(?s)\s*<component name="Microsoft-Windows-UnattendedJoin".*?</component>', ''
         } elseif ($ouDn) {
             $xmlua = $xmlua -replace '(?m)^\s*<MachineObjectOU>.*?</MachineObjectOU>\s*\r?\n', ''
@@ -294,7 +326,7 @@ exit
         }
         [System.IO.File]::WriteAllText('W:\Windows\Panther\unattend.xml', $xmlua, (New-Object System.Text.UTF8Encoding($false)))
         $nom = if ($pcName) { $pcName } else { 'auto' }
-        $jonc = if ($masterMode) { 'MASTER (hors domaine)' } elseif ($ouDn) { "OU $ouDn" } else { 'OU par defaut' }
+        $jonc = if ($masterMode) { 'MASTER (hors domaine)' } elseif ($adminMode) { 'ADMINISTRATIF (hors domaine)' } elseif ($ouDn) { "OU $ouDn" } else { 'OU par defaut' }
         Write-Host "Unattend prepare (nom: $nom ; jonction: $jonc)." -ForegroundColor Cyan
     } else {
         Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force

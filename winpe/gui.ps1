@@ -162,6 +162,72 @@ function Show-MainMenu {
     }
 }
 
+function Show-PosteType {
+    # Type de poste a installer. Retourne 'peda' | 'admin' | '' (annule).
+    #   peda  = poste pedagogique  -> joint au domaine du college (choix OU ensuite)
+    #   admin = poste administratif -> HORS domaine (gere par le rectorat), compte admin local, aucune app
+    if (-not $script:GuiOk) {
+        Write-Host ''
+        Write-Host '  [1] Poste PEDAGOGIQUE (joint au domaine du college)'
+        Write-Host '  [2] Poste ADMINISTRATIF (hors domaine, gere par le rectorat)'
+        Write-Host '  [a] Annuler'
+        $c = Read-Host 'Type de poste [1]'
+        if ($c -match '^(a|A)$') { return '' }
+        if ($c.Trim() -eq '2') { return 'admin' }
+        return 'peda'
+    }
+    try {
+        $f = New-Ec19Form 'Type de poste a installer' 560 350
+
+        $btnPeda = New-Object System.Windows.Forms.Button
+        $btnPeda.Text = "Pedagogique`n(joint au domaine du college)"
+        $btnPeda.Size = New-Object System.Drawing.Size(240, 120)
+        $btnPeda.Location = New-Object System.Drawing.Point(30, 90)
+        $btnPeda.Font = New-Object System.Drawing.Font('Segoe UI', 13, [System.Drawing.FontStyle]::Bold)
+        $btnPeda.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+        $btnPeda.ForeColor = [System.Drawing.Color]::White
+        $btnPeda.FlatStyle = 'Flat'
+        $btnPeda.Add_Click({ $f.Tag = 'peda'; $f.Close() })
+        $f.Controls.Add($btnPeda)
+
+        $btnAdmin = New-Object System.Windows.Forms.Button
+        $btnAdmin.Text = "Administratif`n(hors domaine, rectorat)"
+        $btnAdmin.Size = New-Object System.Drawing.Size(240, 120)
+        $btnAdmin.Location = New-Object System.Drawing.Point(290, 90)
+        $btnAdmin.Font = New-Object System.Drawing.Font('Segoe UI', 13)
+        $btnAdmin.BackColor = [System.Drawing.Color]::FromArgb(230, 230, 230)
+        $btnAdmin.FlatStyle = 'Flat'
+        $btnAdmin.Add_Click({ $f.Tag = 'admin'; $f.Close() })
+        $f.Controls.Add($btnAdmin)
+
+        $btnCancel = New-Object System.Windows.Forms.Button
+        $btnCancel.Text = 'Annuler'
+        $btnCancel.Size = New-Object System.Drawing.Size(240, 42)
+        $btnCancel.Location = New-Object System.Drawing.Point(30, 226)
+        $btnCancel.FlatStyle = 'Flat'
+        $btnCancel.Add_Click({ $f.Tag = ''; $f.Close() })
+        $f.Controls.Add($btnCancel)
+
+        Add-Header $f 'Quel type de poste ?' | Out-Null
+
+        $lblFoot = New-Object System.Windows.Forms.Label
+        $lblFoot.Text = 'Administratif : Windows nu, compte administrateur local, aucune jonction au domaine.'
+        $lblFoot.Location = New-Object System.Drawing.Point(30, 282)
+        $lblFoot.Size = New-Object System.Drawing.Size(500, 40)
+        $lblFoot.ForeColor = [System.Drawing.Color]::Gray
+        $lblFoot.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+        $f.Controls.Add($lblFoot)
+
+        $f.Tag = ''   # croix (X) = annuler
+        $f.ShowDialog() | Out-Null
+        return [string]$f.Tag
+    } catch {
+        Write-Host "Interface indisponible ($($_.Exception.Message)) -> mode texte." -ForegroundColor Yellow
+        $script:GuiOk = $false
+        return (Show-PosteType)
+    }
+}
+
 function Show-ImagePicker($items, $recIndex = -1) {
     # $items = tableau d'objets avec .Label et .Category ('Modele'|'Edition'). $recIndex = index
     # recommande pour ce poste (modele detecte) ou -1. Retourne l'index choisi ou -1.
