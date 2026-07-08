@@ -22,20 +22,23 @@ param(
     # Les recuperer sur un poste de chaque modele : (Get-CimInstance Win32_BaseBoard).Product
     # Si fourni, on ignore la resolution par nom (peu fiable : les libelles Win32.Model ne
     # matchent pas toujours le catalogue HP -> "SysID introuvable").
-    [string[]]$Platforms = @()
+    # SysID releves sur le parc (defaut) -> voir le mapping dans $models plus bas.
+    [string[]]$Platforms = @('871A', '8595', '859B', '8955')
 )
 $ErrorActionPreference = 'Stop'
 
-# Tous les libelles remontes par l'agent (Win32_ComputerSystem.Model).
+# Mapping SysID (plateforme HP) -> modele, releve sur le parc via (Get-CimInstance Win32_BaseBoard).Product.
+# Le SysID est la methode FIABLE (utilise par defaut via $Platforms plus haut). Ces libelles servent
+# aux FILTRES des groupes WDS et au repli par nom si $Platforms est vide.
+#   871A = HP ProDesk 400 G6 Desktop Mini      (Peda)
+#   8595 = HP EliteDesk 800 G5 Desktop Mini    (Peda)
+#   859B = HP ProDesk 400 G6 SFF               (Admin)
+#   8955 = HP Pro Mini 400 G9 Desktop PC       (Peda)
 $models = @(
-    'HP EliteDesk 800 G4 DM 35W',
-    'HP Elitedesk 800 G5',
-    'HP EliteDesk 800 G5 Desktop Mini',
-    'HP EliteDesk 800 G5 DM',
-    'HP Pro Mini 400 G9 Desktop PC',
-    'HP ProDesk 400 G4 SFF',
-    'HP ProDesk 400 G6 Desktop Mini PC',
-    'HP ProDesk 400 G6 SFF'
+    'HP ProDesk 400 G6 Desktop Mini PC',   # 871A
+    'HP EliteDesk 800 G5 Desktop Mini',    # 8595
+    'HP ProDesk 400 G6 SFF',               # 859B
+    'HP Pro Mini 400 G9 Desktop PC'        # 8955
 )
 
 if (-not (Get-Module -ListAvailable -Name HPCMSL)) {
