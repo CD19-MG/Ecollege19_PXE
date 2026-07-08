@@ -332,27 +332,26 @@ exit
         Copy-Item $Unattend W:\Windows\Panther\unattend.xml -Force
     }
 
-    # Agent EPM pour les postes ADMINISTRATIF (hors domaine -> pas de GPO pour le pousser, contrairement
-    # au pedagogique). On EMBARQUE l'agent dans l'image et on l'installe au 1er demarrage via
+    # Agent EPM EMBARQUE dans l'image (prepa des masters PEDAGOGIQUE ET ADMINISTRATIF). La GPO reste
+    # surtout pour les ANCIENS postes ; l'embarquer dans le master garantit sa presence des la capture
+    # (et pour l'admin hors domaine, c'est le SEUL canal). On l'installe au 1er demarrage via
     # SetupComplete.cmd (execute en SYSTEM apres l'OOBE, reseau up ; l'admin 10.19 voit le peda -> l'agent
     # remonte son inventaire). Kit a deposer sur le partage : \\...\Deploy$\agent\ (Ec19EpmAgent.exe,
     # Install-Ec19EpmAgent.ps1, Deploy-GPO.ps1, epm_public.xml, token.txt, pin.txt). Sans kit -> ignore.
-    # Persistant apres sysprep -> le master admin capture embarque l'agent (chaque clone le reinstalle,
+    # Persistant apres sysprep -> le master capture embarque l'agent (chaque clone le reinstalle,
     # idempotent, et s'enregistre avec SON hostname).
-    if ($adminMode) {
-        $agentSrc = "$Share\agent"
-        if (Test-Path (Join-Path $agentSrc 'Deploy-GPO.ps1')) {
-            $agentDst = 'W:\Ec19\agent'
-            New-Item -ItemType Directory -Force -Path $agentDst | Out-Null
-            Copy-Item "$agentSrc\*" $agentDst -Recurse -Force
-            $scriptsDir = 'W:\Windows\Setup\Scripts'
-            New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
-            $sc = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Ec19\agent\Deploy-GPO.ps1 -ShareDir C:\Ec19\agent`r`n"
-            [System.IO.File]::WriteAllText((Join-Path $scriptsDir 'SetupComplete.cmd'), $sc, (New-Object System.Text.ASCIIEncoding))
-            Write-Host "Agent EPM embarque (install au 1er demarrage via SetupComplete)." -ForegroundColor Cyan
-        } else {
-            Write-Host "Kit agent absent ($agentSrc) -> agent NON embarque (a deposer sur le partage)." -ForegroundColor Yellow
-        }
+    $agentSrc = "$Share\agent"
+    if (Test-Path (Join-Path $agentSrc 'Deploy-GPO.ps1')) {
+        $agentDst = 'W:\Ec19\agent'
+        New-Item -ItemType Directory -Force -Path $agentDst | Out-Null
+        Copy-Item "$agentSrc\*" $agentDst -Recurse -Force
+        $scriptsDir = 'W:\Windows\Setup\Scripts'
+        New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
+        $sc = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Ec19\agent\Deploy-GPO.ps1 -ShareDir C:\Ec19\agent`r`n"
+        [System.IO.File]::WriteAllText((Join-Path $scriptsDir 'SetupComplete.cmd'), $sc, (New-Object System.Text.ASCIIEncoding))
+        Write-Host "Agent EPM embarque (install au 1er demarrage via SetupComplete)." -ForegroundColor Cyan
+    } else {
+        Write-Host "Kit agent absent ($agentSrc) -> agent NON embarque (a deposer sur le partage)." -ForegroundColor Yellow
     }
 
     # Outil de capture : depose UNIQUEMENT sur une install NUE (edition), dans un dossier
