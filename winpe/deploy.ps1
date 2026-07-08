@@ -152,7 +152,7 @@ try {
     # Depuis l'ecran OU/Nom on peut REVENIR (Retour) a l'etape precedente, ou ANNULER
     # (retour menu AVEC remontee de statut) -> plus besoin d'eteindre le poste pour sortir.
     $usedGui = $guiLoaded
-    $masterMode = $false; $adminMode = $false; $ouDn = ''; $pcName = ''
+    $masterMode = $false; $adminMode = $false; $masterPrep = $false; $ouDn = ''; $pcName = ''
     $deployReady = $false
     while (-not $deployReady) {
         # --- Choix de l'image ---
@@ -208,17 +208,23 @@ try {
 
         # --- OU / Nom : sous-navigation (Retour = re-choix image ; Annuler = retour menu) ---
         $goBackToImage = $false
-        $masterMode = $false; $adminMode = $false; $ouDn = ''; $pcName = ''
+        $masterMode = $false; $adminMode = $false; $masterPrep = $false; $ouDn = ''; $pcName = ''
         if ($posteType -eq 'admin') {
             # Poste ADMINISTRATIF : pas de choix d'OU, jamais joint au domaine (rectorat) -> on va
             # directement au nom, avec compte admin local (jonction retiree de l'unattend plus bas).
             $adminMode = $true
             Write-Host "Destination : ADMINISTRATIF -> hors domaine (aucune jonction)." -ForegroundColor Magenta
             $stage = 'name'
+        } elseif ($posteType -eq 'masterprep') {
+            # PREPARER UN MASTER : hors domaine (image de reference, sera generalisee) + auto-install
+            # des logiciels au 1er demarrage. Pas d'OU, pas de nom (sysprep /generalize ensuite).
+            $masterMode = $true; $masterPrep = $true
+            Write-Host "Mode PREPARER UN MASTER -> hors domaine + auto-install des logiciels au 1er demarrage." -ForegroundColor Magenta
+            $stage = 'done'
         } else {
             $stage = 'ou'
         }
-        while ($true) {
+        while ($stage -ne 'done') {
             if ($stage -eq 'ou') {
                 # Choix college -> OU (ou MASTER sans jonction). Toujours propose (AUCUN + MASTER meme sans OU).
                 if (Get-Command Show-OuPicker -ErrorAction SilentlyContinue) {
@@ -347,11 +353,33 @@ exit
         Copy-Item "$agentSrc\*" $agentDst -Recurse -Force
         $scriptsDir = 'W:\Windows\Setup\Scripts'
         New-Item -ItemType Directory -Force -Path $scriptsDir | Out-Null
+        # 1er demarrage (SYSTEM) : installe l'agent (+ cd19pkg + config).
         $sc = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Ec19\agent\Deploy-GPO.ps1 -ShareDir C:\Ec19\agent`r`n"
+
+        # Mode PREPARER UN MASTER : on copie le bloc logiciels peda DANS l'image (le WinPE a les creds
+        # du partage ; au 1er boot SYSTEM ne les aurait pas), on embarque Prepare-MasterSoft.ps1, et on
+        # ENCHAINE au 1er demarrage : raccourcis (bloc deja en place, -NoCopy) + cd19pkg update -Master
+        # (grand public depuis le depot, via le token de config -> pas besoin du partage).
+        if ($masterPrep) {
+            $blocSrc = "$Share\master-soft\Logiciels"
+            $colRoot = 'W:\Program Files (x86)\Logiciels_coll' + [char]0xE8 + 'ges'
+            if (Test-Path $blocSrc) {
+                New-Item -ItemType Directory -Force -Path $colRoot | Out-Null
+                Write-Host "Master : copie du bloc logiciels peda dans l'image..." -ForegroundColor Cyan
+                robocopy $blocSrc $colRoot /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
+            } else { Write-Host "Master : bloc absent ($blocSrc) -> aucun logiciel peda embarque." -ForegroundColor Yellow }
+            $pms = "$Share\master-soft\Prepare-MasterSoft.ps1"
+            if (Test-Path $pms) { Copy-Item $pms 'W:\Ec19\Prepare-MasterSoft.ps1' -Force }
+            $sc += "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Ec19\Prepare-MasterSoft.ps1 -NoCopy`r`n"
+            $sc += "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"C:\Program Files\eCollege19-EPM\cd19pkg.ps1`" update -Master`r`n"
+            Write-Host "Master : auto-install programme au 1er demarrage (raccourcis peda + set master grand public)." -ForegroundColor Magenta
+        }
+
         [System.IO.File]::WriteAllText((Join-Path $scriptsDir 'SetupComplete.cmd'), $sc, (New-Object System.Text.ASCIIEncoding))
         Write-Host "Agent EPM embarque (install au 1er demarrage via SetupComplete)." -ForegroundColor Cyan
     } else {
         Write-Host "Kit agent absent ($agentSrc) -> agent NON embarque (a deposer sur le partage)." -ForegroundColor Yellow
+        if ($masterPrep) { Write-Host "Mode master : sans le kit agent, l'auto-install (cd19pkg) ne peut pas s'enchainer. Depose le kit sur le partage." -ForegroundColor Yellow }
     }
 
     # Outil de capture : depose UNIQUEMENT sur une install NUE (edition), dans un dossier

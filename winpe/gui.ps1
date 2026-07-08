@@ -163,21 +163,25 @@ function Show-MainMenu {
 }
 
 function Show-PosteType {
-    # Type de poste a installer. Retourne 'peda' | 'admin' | '' (annule).
-    #   peda  = poste pedagogique  -> joint au domaine du college (choix OU ensuite)
-    #   admin = poste administratif -> HORS domaine (gere par le rectorat), compte admin local, aucune app
+    # Type de poste a installer. Retourne 'peda' | 'admin' | 'masterprep' | '' (annule).
+    #   peda       = poste pedagogique   -> joint au domaine du college (choix OU ensuite)
+    #   admin      = poste administratif -> HORS domaine (rectorat), compte admin local, aucune app
+    #   masterprep = PREPARER UN MASTER  -> edition nue, hors domaine, AUTO-INSTALL des logiciels
+    #                (bloc peda + set master grand public) au 1er demarrage, puis sysprep/capture
     if (-not $script:GuiOk) {
         Write-Host ''
         Write-Host '  [1] Poste PEDAGOGIQUE (joint au domaine du college)'
         Write-Host '  [2] Poste ADMINISTRATIF (hors domaine, gere par le rectorat)'
+        Write-Host '  [3] Preparer un MASTER (edition nue + auto-install des logiciels -> capture)'
         Write-Host '  [a] Annuler'
         $c = Read-Host 'Type de poste [1]'
         if ($c -match '^(a|A)$') { return '' }
         if ($c.Trim() -eq '2') { return 'admin' }
+        if ($c.Trim() -eq '3') { return 'masterprep' }
         return 'peda'
     }
     try {
-        $f = New-Ec19Form 'Type de poste a installer' 560 350
+        $f = New-Ec19Form 'Type de poste a installer' 560 430
 
         $btnPeda = New-Object System.Windows.Forms.Button
         $btnPeda.Text = "Pedagogique`n(joint au domaine du college)"
@@ -200,10 +204,21 @@ function Show-PosteType {
         $btnAdmin.Add_Click({ $f.Tag = 'admin'; $f.Close() })
         $f.Controls.Add($btnAdmin)
 
+        $btnMaster = New-Object System.Windows.Forms.Button
+        $btnMaster.Text = "Preparer un MASTER  (edition nue + auto-install des logiciels)"
+        $btnMaster.Size = New-Object System.Drawing.Size(500, 56)
+        $btnMaster.Location = New-Object System.Drawing.Point(30, 224)
+        $btnMaster.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
+        $btnMaster.BackColor = [System.Drawing.Color]::FromArgb(120, 60, 160)
+        $btnMaster.ForeColor = [System.Drawing.Color]::White
+        $btnMaster.FlatStyle = 'Flat'
+        $btnMaster.Add_Click({ $f.Tag = 'masterprep'; $f.Close() })
+        $f.Controls.Add($btnMaster)
+
         $btnCancel = New-Object System.Windows.Forms.Button
         $btnCancel.Text = 'Annuler'
-        $btnCancel.Size = New-Object System.Drawing.Size(240, 42)
-        $btnCancel.Location = New-Object System.Drawing.Point(30, 226)
+        $btnCancel.Size = New-Object System.Drawing.Size(500, 38)
+        $btnCancel.Location = New-Object System.Drawing.Point(30, 292)
         $btnCancel.FlatStyle = 'Flat'
         $btnCancel.Add_Click({ $f.Tag = ''; $f.Close() })
         $f.Controls.Add($btnCancel)
@@ -211,9 +226,9 @@ function Show-PosteType {
         Add-Header $f 'Quel type de poste ?' | Out-Null
 
         $lblFoot = New-Object System.Windows.Forms.Label
-        $lblFoot.Text = 'Administratif : Windows nu, compte administrateur local, aucune jonction au domaine.'
-        $lblFoot.Location = New-Object System.Drawing.Point(30, 282)
-        $lblFoot.Size = New-Object System.Drawing.Size(500, 40)
+        $lblFoot.Text = 'Master : Windows nu, hors domaine ; les logiciels s installent seuls au 1er demarrage, puis tu syspreps + captures.'
+        $lblFoot.Location = New-Object System.Drawing.Point(30, 344)
+        $lblFoot.Size = New-Object System.Drawing.Size(500, 44)
         $lblFoot.ForeColor = [System.Drawing.Color]::Gray
         $lblFoot.Font = New-Object System.Drawing.Font('Segoe UI', 9)
         $f.Controls.Add($lblFoot)

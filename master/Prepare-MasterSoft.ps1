@@ -22,9 +22,10 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$SoftDir,   # dossier des logiciels a copier (portables)
+    [string]$SoftDir,                                  # dossier des logiciels a copier (requis sauf -NoCopy)
     [string]$InstallRoot,                              # cible ; defaut = C:\Program Files (x86)\Logiciels_colleges
     [string]$PublicDesktop = 'C:\Users\Public\Desktop',
+    [switch]$NoCopy,                                   # bloc deja en place -> raccourcis + purge seulement
     [switch]$NoShortcuts,                              # ne pas (re)generer les raccourcis
     [switch]$KeepOrphans                               # ne pas purger les raccourcis dont la cible a disparu
 )
@@ -32,14 +33,19 @@ $ErrorActionPreference = 'Stop'
 
 # Chemin cible avec accent, construit par code char -> le script reste ASCII pur.
 if (-not $InstallRoot) { $InstallRoot = Join-Path 'C:\Program Files (x86)' ('Logiciels_coll' + [char]0xE8 + 'ges') }
-if (-not (Test-Path -LiteralPath $SoftDir)) { throw "SoftDir introuvable : $SoftDir" }
-
-# --- 1. Copie du bloc ---
-Write-Host ("Copie des logiciels : " + $SoftDir + "  ->  " + $InstallRoot) -ForegroundColor Cyan
-New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-robocopy $SoftDir $InstallRoot /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
-if ($LASTEXITCODE -ge 8) { throw ("robocopy a echoue (code " + $LASTEXITCODE + ").") }   # robocopy : code < 8 = OK
-Write-Host "Logiciels copies." -ForegroundColor Green
+# --- 1. Copie du bloc (sauf -NoCopy : deja copie, ex. par le WinPE en mode "Preparer un master") ---
+if (-not $NoCopy) {
+    if (-not $SoftDir) { throw "SoftDir requis (ou -NoCopy si le bloc est deja en place)." }
+    if (-not (Test-Path -LiteralPath $SoftDir)) { throw "SoftDir introuvable : $SoftDir" }
+    Write-Host ("Copie des logiciels : " + $SoftDir + "  ->  " + $InstallRoot) -ForegroundColor Cyan
+    New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+    robocopy $SoftDir $InstallRoot /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw ("robocopy a echoue (code " + $LASTEXITCODE + ").") }   # robocopy : code < 8 = OK
+    Write-Host "Logiciels copies." -ForegroundColor Green
+} else {
+    New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+    Write-Host "Mode -NoCopy : bloc suppose deja en place -> generation des raccourcis seulement." -ForegroundColor DarkCyan
+}
 
 function Get-Norm($s) { ($s -replace '[^A-Za-z0-9]', '').ToLower() }
 
