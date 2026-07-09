@@ -31,12 +31,20 @@ choice /c ON /n /m "   Lancer la preparation maintenant ? (O = oui / N = non) : 
 if errorlevel 2 exit /b 0
 
 echo(
+echo   Debloat : retrait des applis inutiles de Windows (+ VerrNum au demarrage)...
+if exist "%~dp0RMAppxCLG.ps1" (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0RMAppxCLG.ps1" -NumLock
+) else (
+  echo   [INFO] RMAppxCLG.ps1 absent -^> debloat saute.
+)
+
+echo(
 echo   Nettoyage avant capture (WinSxS, cache Windows Update, temp, corbeille)...
 echo   (peut prendre quelques minutes, patientez)
 if exist "%~dp0Clean-BeforeCapture.ps1" (
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Clean-BeforeCapture.ps1"
 ) else (
-  echo   [INFO] Clean-BeforeCapture.ps1 absent -> nettoyage saute.
+  echo   [INFO] Clean-BeforeCapture.ps1 absent -^> nettoyage saute.
 )
 
 echo(
