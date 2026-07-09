@@ -31,9 +31,12 @@ choice /c ON /n /m "   Lancer la preparation maintenant ? (O = oui / N = non) : 
 if errorlevel 2 exit /b 0
 
 echo(
+rem Master ADMIN (marqueur pose au deploiement) -> on garde MSTeams (le rectorat s'en sert).
+set "KEEPTEAMS="
+if exist "%~dp0master-admin.flag" set "KEEPTEAMS=-KeepTeams"
 echo   Debloat : retrait des applis inutiles de Windows (+ VerrNum au demarrage)...
 if exist "%~dp0RMAppxCLG.ps1" (
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0RMAppxCLG.ps1" -NumLock
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0RMAppxCLG.ps1" -NumLock %KEEPTEAMS%
 ) else (
   echo   [INFO] RMAppxCLG.ps1 absent -^> debloat saute.
 )

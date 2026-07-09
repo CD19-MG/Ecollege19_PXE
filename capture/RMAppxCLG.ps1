@@ -17,7 +17,7 @@
     .\RMAppxCLG.ps1 -NumLock
 #>
 [CmdletBinding()]
-param([switch]$NumLock)
+param([switch]$NumLock, [switch]$KeepTeams)   # -KeepTeams : garde MSTeams (master ADMIN : le rectorat s'en sert)
 $ErrorActionPreference = 'Continue'
 
 # Motifs a retirer (comparaison -like, donc les variantes/editeurs sont captures). Grouper par theme.
@@ -73,26 +73,30 @@ $Remove = @(
     'Microsoft.Windows.Family'                  # Controle parental (Family)
 )
 
+# -KeepTeams : on retire Teams de la liste (master ADMIN). 'MicrosoftTeams' = Teams perso, 'MSTeams' = Teams (base Win11).
+if ($KeepTeams) { $Remove = @($Remove | Where-Object { $_ -notin @('MicrosoftTeams', 'MSTeams') }) }
+
 function Write-Log($msg, $color = 'Gray') { Write-Host $msg -ForegroundColor $color }
 
 $removedInst = 0; $removedProv = 0
 foreach ($pat in $Remove) {
-    # 1) Installe pour tous les utilisateurs
-    try {
-        foreach ($p in @(Get-AppxPackage -AllUsers -Name $pat -ErrorAction SilentlyContinue)) {
-            try { Remove-AppxPackage -AllUsers -Package $p.PackageFullName -ErrorAction Stop; $removedInst++; Write-Log ("  - installe : " + $p.Name) 'DarkYellow' }
-            catch { Write-Log ("  ! echec installe : " + $p.Name + " (" + $_.Exception.Message + ")") 'DarkGray' }
-        }
-    } catch {}
-    # 2) Provisionne (image) -> ne revient pas pour les nouveaux profils
+    # 1) Provisionne (image) EN PREMIER : le retrait -AllUsers deprovisionne souvent au passage, ce qui
+    #    ferait afficher "0 provisionne" a tort. On retire donc le provisionne avant l'installe -> compte fidele.
     try {
         foreach ($pp in @(Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $pat })) {
-            try { Remove-AppxProvisionedPackage -Online -PackageName $pp.PackageName -ErrorAction Stop | Out-Null; $removedProv++; Write-Log ("  - provisionne : " + $pp.DisplayName) 'Yellow' }
-            catch { Write-Log ("  ! echec provisionne : " + $pp.DisplayName + " (" + $_.Exception.Message + ")") 'DarkGray' }
+            try { Remove-AppxProvisionedPackage -Online -PackageName $pp.PackageName -ErrorAction Stop | Out-Null; $removedProv++; Write-Log ("  - retire (provisionne) : " + $pp.DisplayName) 'Yellow' }
+            catch { Write-Log ("  ! echec retrait provisionne : " + $pp.DisplayName + " (" + $_.Exception.Message + ")") 'DarkGray' }
+        }
+    } catch {}
+    # 2) Installe pour tous les utilisateurs
+    try {
+        foreach ($p in @(Get-AppxPackage -AllUsers -Name $pat -ErrorAction SilentlyContinue)) {
+            try { Remove-AppxPackage -AllUsers -Package $p.PackageFullName -ErrorAction Stop; $removedInst++; Write-Log ("  - retire (installe) : " + $p.Name) 'DarkYellow' }
+            catch { Write-Log ("  ! echec retrait installe : " + $p.Name + " (" + $_.Exception.Message + ")") 'DarkGray' }
         }
     } catch {}
 }
-Write-Log ("Debloat termine : " + $removedInst + " paquet(s) installe(s) + " + $removedProv + " provisionne(s) retire(s).") 'Green'
+Write-Log ("Debloat termine : " + $removedInst + " installe(s) retire(s) + " + $removedProv + " provisionne(s) retire(s).") 'Green'
 
 # --- OneDrive : installeur Win32 (pas un AppX) -> desinstalleur dedie + coupe la reinstallation auto
 #     par profil (Active Setup). L'utilisateur qui le veut peut toujours le reinstaller (Store / web). ---

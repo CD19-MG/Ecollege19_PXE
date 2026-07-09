@@ -152,7 +152,7 @@ try {
     # Depuis l'ecran OU/Nom on peut REVENIR (Retour) a l'etape precedente, ou ANNULER
     # (retour menu AVEC remontee de statut) -> plus besoin d'eteindre le poste pour sortir.
     $usedGui = $guiLoaded
-    $masterMode = $false; $adminMode = $false; $masterPrep = $false; $ouDn = ''; $pcName = ''
+    $masterMode = $false; $adminMode = $false; $masterPrep = $false; $masterKind = ''; $ouDn = ''; $pcName = ''
     $deployReady = $false
     while (-not $deployReady) {
         # --- Choix de l'image ---
@@ -208,18 +208,19 @@ try {
 
         # --- OU / Nom : sous-navigation (Retour = re-choix image ; Annuler = retour menu) ---
         $goBackToImage = $false
-        $masterMode = $false; $adminMode = $false; $masterPrep = $false; $ouDn = ''; $pcName = ''
+        $masterMode = $false; $adminMode = $false; $masterPrep = $false; $masterKind = ''; $ouDn = ''; $pcName = ''
         if ($posteType -eq 'admin') {
             # Poste ADMINISTRATIF : pas de choix d'OU, jamais joint au domaine (rectorat) -> on va
             # directement au nom, avec compte admin local (jonction retiree de l'unattend plus bas).
             $adminMode = $true
             Write-Host "Destination : ADMINISTRATIF -> hors domaine (aucune jonction)." -ForegroundColor Magenta
             $stage = 'name'
-        } elseif ($posteType -eq 'masterprep') {
-            # PREPARER UN MASTER : hors domaine (image de reference, sera generalisee) + auto-install
-            # des logiciels au 1er demarrage. Pas d'OU, pas de nom (sysprep /generalize ensuite).
+        } elseif ($posteType -eq 'masterpeda' -or $posteType -eq 'masteradmin') {
+            # MASTER (image de reference, sera generalisee) : hors domaine, sans nom, + auto-install au 1er
+            # demarrage. PEDA = bloc peda + set master peda. ADMIN = set master ADMIN (Office 2007 + apps) + exe rectorat.
             $masterMode = $true; $masterPrep = $true
-            Write-Host "Mode PREPARER UN MASTER -> hors domaine + auto-install des logiciels au 1er demarrage." -ForegroundColor Magenta
+            $masterKind = if ($posteType -eq 'masteradmin') { 'admin' } else { 'peda' }
+            Write-Host ("Mode MASTER " + $masterKind.ToUpper() + " -> hors domaine + auto-install au 1er demarrage.") -ForegroundColor Magenta
             $stage = 'done'
         } else {
             $stage = 'ou'
@@ -360,7 +361,7 @@ exit
         # du partage ; au 1er boot SYSTEM ne les aurait pas), on embarque Prepare-MasterSoft.ps1, et on
         # ENCHAINE au 1er demarrage : raccourcis (bloc deja en place, -NoCopy) + cd19pkg update -Master
         # (grand public depuis le depot, via le token de config -> pas besoin du partage).
-        if ($masterPrep) {
+        if ($masterPrep -and $masterKind -eq 'peda') {
             $blocSrc = "$Share\master-soft\Logiciels"
             $colRoot = 'W:\Program Files (x86)\Logiciels_coll' + [char]0xE8 + 'ges'
             if (Test-Path $blocSrc) {
@@ -385,7 +386,22 @@ exit
             if (Test-Path $pms) { Copy-Item $pms 'W:\Ec19\Prepare-MasterSoft.ps1' -Force }
             $sc += "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Ec19\Prepare-MasterSoft.ps1 -NoCopy`r`n"
             $sc += "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"C:\Program Files\eCollege19-EPM\cd19pkg.ps1`" update -Master`r`n"
-            Write-Host "Master : auto-install programme au 1er demarrage (raccourcis peda + set master grand public)." -ForegroundColor Magenta
+            Write-Host "Master PEDA : auto-install programme au 1er demarrage (raccourcis peda + set master peda)." -ForegroundColor Magenta
+        }
+        elseif ($masterPrep -and $masterKind -eq 'admin') {
+            # MASTER ADMIN : PAS de bloc peda. Set master ADMIN (Office 2007 + apps cochees) via cd19pkg -Set admin,
+            # puis l'exe de preparation du rectorat (depose dans $Share\master-admin), lance EN DERNIER (dernier mot).
+            New-Item -ItemType Directory -Force -Path 'W:\Ec19' | Out-Null
+            # Marqueur lu par Preparer-la-capture.cmd -> debloat en gardant MSTeams (le rectorat s'en sert).
+            Set-Content -Path 'W:\Ec19\master-admin.flag' -Value 'admin' -Encoding ascii
+            $sc += "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"C:\Program Files\eCollege19-EPM\cd19pkg.ps1`" update -Set admin`r`n"
+            $recSrc = Get-ChildItem "$Share\master-admin" -Filter *.exe -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($recSrc) {
+                Copy-Item $recSrc.FullName (Join-Path 'W:\Ec19' $recSrc.Name) -Force
+                $sc += ('"C:\Ec19\' + $recSrc.Name + '"' + "`r`n")
+                Write-Host ("Master ADMIN : exe rectorat embarque (" + $recSrc.Name + ") -> lance au 1er demarrage.") -ForegroundColor Magenta
+            } else { Write-Host "Master ADMIN : aucun exe rectorat dans $Share\master-admin (etape sautee)." -ForegroundColor Yellow }
+            Write-Host "Master ADMIN : auto-install programme (set master admin + exe rectorat)." -ForegroundColor Magenta
         }
 
         [System.IO.File]::WriteAllText((Join-Path $scriptsDir 'SetupComplete.cmd'), $sc, (New-Object System.Text.ASCIIEncoding))

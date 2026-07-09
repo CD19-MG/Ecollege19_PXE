@@ -163,21 +163,24 @@ function Show-MainMenu {
 }
 
 function Show-PosteType {
-    # Type de poste a installer. Retourne 'peda' | 'admin' | 'masterprep' | '' (annule).
-    #   peda       = poste pedagogique   -> joint au domaine du college (choix OU ensuite)
-    #   admin      = poste administratif -> HORS domaine (rectorat), compte admin local, aucune app
-    #   masterprep = PREPARER UN MASTER  -> edition nue, hors domaine, AUTO-INSTALL des logiciels
-    #                (bloc peda + set master grand public) au 1er demarrage, puis sysprep/capture
+    # Type de poste a installer. Retourne 'peda' | 'admin' | 'masterpeda' | 'masteradmin' | '' (annule).
+    #   peda        = poste pedagogique   -> joint au domaine du college (choix OU ensuite)
+    #   admin       = poste administratif -> HORS domaine (rectorat), compte admin local, aucune app
+    #   masterpeda  = MASTER PEDA  -> edition nue, hors domaine, auto-install (bloc peda + set master peda) -> capture
+    #   masteradmin = MASTER ADMIN -> edition nue, hors domaine, auto-install (set master ADMIN : Office 2007 + apps)
+    #                 + exe de preparation du rectorat, puis capture
     if (-not $script:GuiOk) {
         Write-Host ''
         Write-Host '  [1] Poste PEDAGOGIQUE (joint au domaine du college)'
         Write-Host '  [2] Poste ADMINISTRATIF (hors domaine, gere par le rectorat)'
-        Write-Host '  [3] Preparer un MASTER (edition nue + auto-install des logiciels -> capture)'
+        Write-Host '  [3] MASTER PEDA  (edition nue + logiciels peda -> capture)'
+        Write-Host '  [4] MASTER ADMIN (edition nue + set admin/Office + exe rectorat -> capture)'
         Write-Host '  [a] Annuler'
         $c = Read-Host 'Type de poste [1]'
         if ($c -match '^(a|A)$') { return '' }
         if ($c.Trim() -eq '2') { return 'admin' }
-        if ($c.Trim() -eq '3') { return 'masterprep' }
+        if ($c.Trim() -eq '3') { return 'masterpeda' }
+        if ($c.Trim() -eq '4') { return 'masteradmin' }
         return 'peda'
     }
     try {
@@ -204,16 +207,27 @@ function Show-PosteType {
         $btnAdmin.Add_Click({ $f.Tag = 'admin'; $f.Close() })
         $f.Controls.Add($btnAdmin)
 
-        $btnMaster = New-Object System.Windows.Forms.Button
-        $btnMaster.Text = "Preparer un MASTER  (edition nue + auto-install des logiciels)"
-        $btnMaster.Size = New-Object System.Drawing.Size(500, 56)
-        $btnMaster.Location = New-Object System.Drawing.Point(30, 224)
-        $btnMaster.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
-        $btnMaster.BackColor = [System.Drawing.Color]::FromArgb(120, 60, 160)
-        $btnMaster.ForeColor = [System.Drawing.Color]::White
-        $btnMaster.FlatStyle = 'Flat'
-        $btnMaster.Add_Click({ $f.Tag = 'masterprep'; $f.Close() })
-        $f.Controls.Add($btnMaster)
+        $btnMasterPeda = New-Object System.Windows.Forms.Button
+        $btnMasterPeda.Text = "MASTER PEDA`n(edition nue + logiciels peda)"
+        $btnMasterPeda.Size = New-Object System.Drawing.Size(240, 56)
+        $btnMasterPeda.Location = New-Object System.Drawing.Point(30, 224)
+        $btnMasterPeda.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
+        $btnMasterPeda.BackColor = [System.Drawing.Color]::FromArgb(120, 60, 160)
+        $btnMasterPeda.ForeColor = [System.Drawing.Color]::White
+        $btnMasterPeda.FlatStyle = 'Flat'
+        $btnMasterPeda.Add_Click({ $f.Tag = 'masterpeda'; $f.Close() })
+        $f.Controls.Add($btnMasterPeda)
+
+        $btnMasterAdmin = New-Object System.Windows.Forms.Button
+        $btnMasterAdmin.Text = "MASTER ADMIN`n(set admin/Office + rectorat)"
+        $btnMasterAdmin.Size = New-Object System.Drawing.Size(240, 56)
+        $btnMasterAdmin.Location = New-Object System.Drawing.Point(290, 224)
+        $btnMasterAdmin.Font = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
+        $btnMasterAdmin.BackColor = [System.Drawing.Color]::FromArgb(160, 90, 40)
+        $btnMasterAdmin.ForeColor = [System.Drawing.Color]::White
+        $btnMasterAdmin.FlatStyle = 'Flat'
+        $btnMasterAdmin.Add_Click({ $f.Tag = 'masteradmin'; $f.Close() })
+        $f.Controls.Add($btnMasterAdmin)
 
         $btnCancel = New-Object System.Windows.Forms.Button
         $btnCancel.Text = 'Annuler'
