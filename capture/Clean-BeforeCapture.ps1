@@ -49,6 +49,13 @@ foreach ($u in (Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinu
 }
 Ok "Temp Windows + profils vides."
 
+# 4b. Dossiers Downloads des profils (installeurs/telechargements traineurs sur le master)
+Step "Dossiers Downloads des profils"
+foreach ($u in (Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinue)) {
+    RmContent (Join-Path $u.FullName 'Downloads')
+}
+Ok "Downloads des profils vides."
+
 # 5. Corbeille
 Step "Corbeille"
 try { Clear-RecycleBin -Force -ErrorAction Stop; Ok "Corbeille videe." }
