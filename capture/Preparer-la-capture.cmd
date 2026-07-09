@@ -31,6 +31,15 @@ choice /c ON /n /m "   Lancer la preparation maintenant ? (O = oui / N = non) : 
 if errorlevel 2 exit /b 0
 
 echo(
+echo   Nettoyage avant capture (WinSxS, cache Windows Update, temp, corbeille)...
+echo   (peut prendre quelques minutes, patientez)
+if exist "%~dp0Clean-BeforeCapture.ps1" (
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Clean-BeforeCapture.ps1"
+) else (
+  echo   [INFO] Clean-BeforeCapture.ps1 absent -> nettoyage saute.
+)
+
+echo(
 echo   Generalisation en cours... le poste va s'eteindre tout seul.
 echo   (ne rien faire, patientez)
 echo(
