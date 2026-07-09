@@ -406,6 +406,11 @@ exit
         # generalize.xml (SkipRearm) a cote du .cmd -> re-sysprep du master sans limite de rearm
         $genXml = "$Share\generalize.xml"
         if (Test-Path $genXml) { Copy-Item $genXml (Join-Path $toolDir 'generalize.xml') -Force }
+        # Scripts de prepa capture (debloat + nettoyage), a cote du .cmd -> executes avant sysprep.
+        foreach ($f in @('Clean-BeforeCapture.ps1', 'RMAppxCLG.ps1')) {
+            $srcf = "$Share\$f"
+            if (Test-Path $srcf) { Copy-Item $srcf (Join-Path $toolDir $f) -Force }
+        }
         icacls $toolDir /inheritance:r /grant "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" | Out-Null
         Write-Host "Outil de capture depose dans C:\Ec19 (admins uniquement)." -ForegroundColor Cyan
     }
