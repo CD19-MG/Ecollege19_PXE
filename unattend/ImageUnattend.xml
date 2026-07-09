@@ -43,6 +43,14 @@
           <Path>powershell -NoProfile -Command "Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' } | Enable-LocalUser"</Path>
           <Description>Activer l'administrateur local integre</Description>
         </RunSynchronousCommand>
+        <!-- Empeche le chiffrement automatique de l'appareil (Windows 11 "device encryption") : sinon
+             BitLocker s'active seul et BLOQUE le sysprep du master (et chiffre les clients en silence).
+             A poser en specialize, AVANT l'OOBE. BitLocker reste activable ensuite par GPO si voulu. -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add HKLM\SYSTEM\CurrentControlSet\Control\BitLocker /v PreventDeviceEncryption /t REG_DWORD /d 1 /f</Path>
+          <Description>Empecher le chiffrement automatique BitLocker (sysprep master)</Description>
+        </RunSynchronousCommand>
       </RunSynchronous>
     </component>
   </settings>
