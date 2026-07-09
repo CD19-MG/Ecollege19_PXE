@@ -7,8 +7,9 @@
 
   Ce qu'il fait :
     1. copie le dossier de logiciels (portables) dans "C:\Program Files (x86)\Logiciels_colleges" ;
-    2. GENERE un raccourci bureau public par logiciel, pointant vers l'exe principal du dossier
-       (pas de dossier "Icones" a maintenir : une seule source, l'icone vient de l'exe) ;
+    2. GENERE un raccourci par logiciel dans le sous-dossier "Logiciels" du bureau public (meme
+       dossier que cd19pkg option 'Bureau public -> dossier Logiciels'), pointant vers l'exe
+       principal (pas de dossier "Icones" a maintenir : une seule source, l'icone vient de l'exe) ;
     3. PURGE les raccourcis orphelins (dont la cible sous Logiciels_colleges n'existe plus) -> si on
        retire un logiciel, son raccourci disparait. (Desactivable avec -KeepOrphans.)
 
@@ -25,6 +26,7 @@ param(
     [string]$SoftDir,                                  # dossier des logiciels a copier (requis sauf -NoCopy)
     [string]$InstallRoot,                              # cible ; defaut = C:\Program Files (x86)\Logiciels_colleges
     [string]$PublicDesktop = 'C:\Users\Public\Desktop',
+    [string]$ShortcutFolder = 'Logiciels',             # sous-dossier du bureau public pour les raccourcis (vide = racine) ; aligne avec cd19pkg
     [switch]$NoCopy,                                   # bloc deja en place -> raccourcis + purge seulement
     [switch]$NoShortcuts,                              # ne pas (re)generer les raccourcis
     [switch]$KeepOrphans                               # ne pas purger les raccourcis dont la cible a disparu
@@ -63,13 +65,16 @@ function Get-MainExe($dir) {
 }
 
 if (-not $NoShortcuts) {
-    New-Item -ItemType Directory -Force -Path $PublicDesktop | Out-Null
+    # Raccourcis dans un sous-dossier "Logiciels" du bureau public (meme dossier que cd19pkg
+    # 'desktop-logiciels') pour un bureau coherent. -ShortcutFolder '' -> racine (ancien comportement).
+    $lnkDir = if ($ShortcutFolder) { Join-Path $PublicDesktop $ShortcutFolder } else { $PublicDesktop }
+    New-Item -ItemType Directory -Force -Path $lnkDir | Out-Null
     $sh = New-Object -ComObject WScript.Shell
     $made = 0; $skipped = @()
     foreach ($d in (Get-ChildItem -LiteralPath $InstallRoot -Directory -ErrorAction SilentlyContinue)) {
         $exe = Get-MainExe $d.FullName
         if (-not $exe) { $skipped += $d.Name; continue }
-        $lnk = Join-Path $PublicDesktop ($d.Name + '.lnk')
+        $lnk = Join-Path $lnkDir ($d.Name + '.lnk')
         $s = $sh.CreateShortcut($lnk)
         $s.TargetPath = $exe
         $s.WorkingDirectory = Split-Path $exe
@@ -84,7 +89,7 @@ if (-not $NoShortcuts) {
     if (-not $KeepOrphans) {
         $rootLow = $InstallRoot.ToLower()
         $purged = 0
-        foreach ($l in (Get-ChildItem -LiteralPath $PublicDesktop -Filter *.lnk -File -ErrorAction SilentlyContinue)) {
+        foreach ($l in (Get-ChildItem -LiteralPath $lnkDir -Filter *.lnk -File -ErrorAction SilentlyContinue)) {
             try {
                 $tgt = $sh.CreateShortcut($l.FullName).TargetPath
                 if ($tgt -and $tgt.ToLower().StartsWith($rootLow) -and -not (Test-Path -LiteralPath $tgt)) {
