@@ -365,8 +365,21 @@ exit
             $colRoot = 'W:\Program Files (x86)\Logiciels_coll' + [char]0xE8 + 'ges'
             if (Test-Path $blocSrc) {
                 New-Item -ItemType Directory -Force -Path $colRoot | Out-Null
-                Write-Host "Master : copie du bloc logiciels peda dans l'image..." -ForegroundColor Cyan
-                robocopy $blocSrc $colRoot /E /NFL /NDL /NJH /NJS /NP /R:1 /W:1 | Out-Null
+                $blocN = @(Get-ChildItem -LiteralPath $blocSrc -Recurse -File -ErrorAction SilentlyContinue).Count
+                Write-Host ("Master : copie du bloc logiciels peda ({0} fichiers)..." -f $blocN) -ForegroundColor Cyan
+                # Barre d'avancement : robocopy liste 1 ligne par fichier (sans /NFL) ; on compte les lignes
+                # de fichier (^\s+\S) vs total. Console silencieuse (lignes captees dans $rcLog, montrees si echec).
+                $blocDone = 0
+                $rcLog = robocopy $blocSrc $colRoot /E /NDL /NJH /NJS /NP /R:1 /W:1 | ForEach-Object {
+                    if ($_ -match '^\s+\S') {
+                        $blocDone++
+                        if ($blocN -gt 0) { Write-Progress -Activity 'Copie des logiciels peda' -Status ("$blocDone / $blocN fichiers") -PercentComplete ([math]::Min(100, [int](($blocDone / $blocN) * 100))) }
+                    }
+                    $_
+                }
+                Write-Progress -Activity 'Copie des logiciels peda' -Completed
+                if ($LASTEXITCODE -ge 8) { Write-Host ("Copie du bloc peda : robocopy code {0} -" -f $LASTEXITCODE) -ForegroundColor Yellow; $rcLog | Select-Object -Last 10 | ForEach-Object { Write-Host $_ } }
+                else { Write-Host "Bloc logiciels peda copie." -ForegroundColor Green }
             } else { Write-Host "Master : bloc absent ($blocSrc) -> aucun logiciel peda embarque." -ForegroundColor Yellow }
             $pms = "$Share\master-soft\Prepare-MasterSoft.ps1"
             if (Test-Path $pms) { Copy-Item $pms 'W:\Ec19\Prepare-MasterSoft.ps1' -Force }
@@ -420,12 +433,18 @@ exit
             Write-Host ("Aucun dossier pilote dedie (essaye : {0}) -> tous les pilotes (PnP)..." -f ($cands -join ', ')) -ForegroundColor Cyan
             $drvTarget = $DrvDir
         }
-        # Barre de progression (comme l'apply) ; sinon dism direct.
-        if (Get-Command Invoke-DismBar -ErrorAction SilentlyContinue) {
-            Invoke-DismBar ('/Image:W:\ /Add-Driver /Driver:"' + $drvTarget + '" /Recurse') | Out-Null
-        } else {
-            dism /Image:W:\ /Add-Driver /Driver:$drvTarget /Recurse
+        # Barre d'avancement : /Add-Driver n'emet PAS la ligne de pourcentage que lit Invoke-DismBar,
+        # mais des lignes "Installing X of Y" (EN) / "Installation de X sur Y" (FR) -> on les parse pour
+        # piloter la barre. Console silencieuse (sortie captee dans $drvLog, affichee seulement si echec).
+        $drvLog = dism /Image:W:\ /Add-Driver /Driver:$drvTarget /Recurse 2>&1 | ForEach-Object {
+            if ($_ -match '(?:Installing|Installation de)\s+(\d+)\s+(?:of|sur)\s+(\d+)') {
+                Write-Progress -Activity 'Injection des pilotes' -Status ($matches[1] + ' / ' + $matches[2]) -PercentComplete ([int]((([int]$matches[1]) / [int]$matches[2]) * 100))
+            }
+            $_
         }
+        Write-Progress -Activity 'Injection des pilotes' -Completed
+        if ($LASTEXITCODE -ne 0) { Write-Host ("Injection des pilotes : dism code {0} -" -f $LASTEXITCODE) -ForegroundColor Yellow; $drvLog | Select-Object -Last 12 | ForEach-Object { Write-Host $_ } }
+        else { Write-Host "Pilotes injectes." -ForegroundColor Green }
     }
 
     # Rendre bootable (UEFI)
